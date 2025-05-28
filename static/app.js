@@ -1,0 +1,378 @@
+// Secure File Upload System - Client-side JavaScript
+
+class SecureUploadClient {
+    constructor() {
+        this.clientIP = window.serverData?.clientIP || '';
+        this.hasKeys = window.serverData?.hasKeys || false;
+        this.serverPublicKey = window.serverData?.publicKey || null;
+        this.selectedHost = window.serverData?.selectedHost || null;
+        
+        this.initializeEventListeners();
+    }
+    
+    initializeEventListeners() {
+        // Generate keys button
+        const generateKeysBtn = document.getElementById('generateKeysBtn');
+        if (generateKeysBtn) {
+            generateKeysBtn.addEventListener('click', () => this.generateKeys());
+        }
+        
+        // Upload form
+        const uploadForm = document.getElementById('uploadForm');
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', (e) => this.handleFileUpload(e));
+        }
+    }
+    
+    async generateKeys() {
+        const btn = document.getElementById('generateKeysBtn');
+        const originalText = btn.innerHTML;
+        
+        try {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generating...';
+            btn.disabled = true;
+            
+            const response = await fetch('/generate_keys', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showAlert('success', result.message);
+                // Reload page to show the new state
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                this.showAlert('danger', result.message);
+            }
+            
+        } catch (error) {
+            console.error('Error generating keys:', error);
+            this.showAlert('danger', 'Failed to generate keys. Please try again.');
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+    
+    async handleFileUpload(event) {
+        event.preventDefault();
+        
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            this.showAlert('warning', 'Please select a file to upload');
+            return;
+        }
+        
+        const uploadBtn = document.querySelector('#uploadBtn');
+        const originalText = uploadBtn.innerHTML;
+        
+        try {
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
+            uploadBtn.disabled = true;
+            
+            // Create FormData and add file
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            // Upload to server
+            const response = await fetch('/upload', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.showAlert('success', 'File uploaded successfully! Redirecting to verification...');
+                
+                // Update session info display
+                document.getElementById('sessionToken').textContent = result.session_token;
+                document.getElementById('fileHash').textContent = result.file_hash;
+                
+                // Add transition to verification step
+                const uploadStep = document.querySelector('.step.active');
+                const verificationStep = document.querySelector('.step:last-child');
+                
+                uploadStep.classList.remove('active');
+                uploadStep.classList.add('completed');
+                verificationStep.classList.add('active');
+                
+                // Show verification info
+                document.getElementById('uploadForm').style.display = 'none';
+                document.getElementById('successInfo').classList.remove('d-none');
+                document.querySelector('#headerbar .col:last-child .step').classList.add('completed');
+                
+                // Clear file input
+                fileInput.value = '';
+            } else {
+                this.showAlert('danger', result.error || 'Upload failed');
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.showAlert('danger', 'Upload failed: ' + error.message);
+        } finally {
+            uploadBtn.innerHTML = originalText;
+            uploadBtn.disabled = false;
+        }
+    }
+    
+    async downloadFile(sessionToken) {
+        try {
+            const response = await fetch(`/download/${sessionToken}`);
+            
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                // Get filename from content-disposition header
+                const contentDisposition = response.headers.get('content-disposition');
+                const filenameMatch = contentDisposition && contentDisposition.match(/filename="?([^"]+)"?/);
+                a.download = filenameMatch ? filenameMatch[1] : 'downloaded-file';
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                this.showAlert('success', 'File downloaded successfully!');
+            } else {
+                const error = await response.json();
+                this.showAlert('danger', error.error || 'Download failed');
+            }
+        } catch (error) {
+            console.error('Download error:', error);
+            this.showAlert('danger', 'Download failed: ' + error.message);
+        }
+    }
+    
+    // Utility functions for crypto operations (simulated for demo)
+    generateRandomKey(length) {
+        const array = new Uint8Array(length);
+        crypto.getRandomValues(array);
+        return array;
+    }
+    
+    async readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(new Uint8Array(reader.result));
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    
+    async simulateAESEncryption(data, key, iv) {
+        // In a real implementation, this would use Web Crypto API
+        // For now, we'll return the data as is since server-side encryption is our focus
+        return data;
+    }
+    
+    async simulateSignature(data) {
+        // Simulate signature creation
+        const encoder = new TextEncoder();
+        const dataArray = encoder.encode(data);
+        return this.generateRandomKey(128); // Simulated signature
+    }
+    
+    async simulateRSAEncryption(data) {
+        // Simulate RSA encryption of session key
+        return this.generateRandomKey(128); // Simulated encrypted session key
+    }
+    
+    async calculateSHA512(data) {
+        try {
+            const wordArray = CryptoJS.lib.WordArray.create(data);
+    
+            const hash = CryptoJS.SHA512(wordArray).toString(CryptoJS.enc.Hex);
+    
+            return hash;
+        } catch (error) {
+            this.showAlert('danger', 'Hashing failed: ' + error.message);
+            throw error;
+        }
+    }
+    
+    
+    arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+    
+    showProgress(percentage, text) {
+        const progressContainer = document.getElementById('uploadProgress');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        
+        progressContainer.style.display = 'block';
+        progressBar.style.width = percentage + '%';
+        progressBar.setAttribute('aria-valuenow', percentage);
+        progressText.textContent = text;
+        
+        if (percentage === 100) {
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+            }, 2000);
+        }
+    }
+    
+    showUploadResult(type, result) {
+        const resultContainer = document.getElementById('uploadResult');
+        
+        let alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        let icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+        
+        let content = `
+            <div class="alert ${alertClass}">
+                <i class="fas ${icon} me-2"></i>
+                <strong>${type === 'success' ? 'Success!' : 'Error!'}</strong>
+                <p class="mb-0">${result.message}</p>
+        `;
+        
+        if (type === 'success' && result.session_token) {
+            content += `
+                <hr>
+                <small>
+                    <strong>Session Token:</strong> <code>${result.session_token}</code><br>
+                    <strong>Filename:</strong> ${result.filename}<br>
+                    <strong>Decrypted Size:</strong> ${result.file_size} bytes
+                </small>
+            `;
+        }
+        
+        content += '</div>';
+        
+        resultContainer.innerHTML = content;
+        resultContainer.style.display = 'block';
+        
+        // Scroll to result
+        resultContainer.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    showAlert(type, message) {
+        const alertHtml = `
+            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        
+        // Insert at the top of the container
+        const container = document.querySelector('.container');
+        const existingContent = container.innerHTML;
+        container.innerHTML = alertHtml + existingContent;
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            const alert = container.querySelector('.alert');
+            if (alert) {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            }
+        }, 5000);
+    }
+}
+
+// Initialize the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    new SecureUploadClient();
+});
+
+// Additional utility functions
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        console.log('Copied to clipboard');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+}
+
+// Export for global access if needed
+window.SecureUploadClient = SecureUploadClient;
+
+
+// Recipient Management Functions
+async function addRecipient(ip, name) {
+    try {
+        const response = await fetch('/add_recipient', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ip, name })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            location.reload();
+        } else {
+            alert(`Error: ${result.message}`);
+        }
+    } catch (error) {
+        console.error('Error adding recipient:', error);
+        alert('Failed to add recipient');
+    }
+}
+
+async function deleteRecipient(id) {
+    try {
+        const response = await fetch(`/delete_recipient/${id}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            location.reload();
+        } else {
+            alert(`Error: ${result.message}`);
+        }
+    } catch (error) {
+        console.error('Error deleting recipient:', error);
+        alert('Failed to delete recipient');
+    }
+}
+
+// Event Listeners for Recipient Management
+document.addEventListener('DOMContentLoaded', () => {
+    const addRecipientForm = document.getElementById('addRecipientForm');
+    if (addRecipientForm) {
+        addRecipientForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const ip = document.getElementById('recipientIp').value;
+            const name = document.getElementById('recipientName').value;
+            addRecipient(ip, name);
+        });
+    }
+    
+    const deleteButtons = document.querySelectorAll('.delete-recipient');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const id = button.getAttribute('data-id');
+            if (confirm('Are you sure you want to delete this recipient?')) {
+                deleteRecipient(id);
+            }
+        });
+    });
+});

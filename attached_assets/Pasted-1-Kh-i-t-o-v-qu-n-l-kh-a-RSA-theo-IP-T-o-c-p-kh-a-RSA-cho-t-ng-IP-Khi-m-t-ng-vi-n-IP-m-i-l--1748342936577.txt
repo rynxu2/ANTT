@@ -1,0 +1,137 @@
+1. Khởi tạo và quản lý khóa RSA theo IP
+
+Tạo cặp khóa RSA cho từng IP:
+
+Khi một ứng viên (IP mới) lần đầu kết nối, hệ thống sẽ tự động tạo một cặp khóa RSA 1024-bit (public key + private key) riêng cho IP đó.
+
+Private key được lưu trữ an toàn phía server (có thể mã hóa bằng master key hoặc lưu trong HSM).
+
+Public key được gửi cho ứng viên trong giai đoạn handshake.
+
+Cơ sở dữ liệu khóa:
+
+Dùng database (ví dụ: Redis, SQL) để lưu trữ ánh xạ IP -> (public_key, private_key).
+
+Private key có thể được mã hóa trước khi lưu (dùng AES với master key của server).
+
+2. Luồng xử lý chi tiết
+
+a. Giai đoạn Handshake
+
+Ứng viên gửi:
+
+plaintext
+
+{
+
+"message": "Hello!",
+
+"ip": "123.456.789.100"
+
+}
+
+Server kiểm tra IP:
+
+Nếu IP chưa có trong database → tạo cặp khóa mới, lưu private key, gửi public key.
+
+Nếu IP đã tồn tại → lấy public key từ database.
+
+Server phản hồi:
+
+plaintext
+
+{
+
+"message": "Ready!",
+
+"public_key": "<PEM_format_RSA_public_key>"
+
+}
+
+b. Xác thực & Trao khóa
+
+Ứng viên:
+
+Ký metadata (SHA-512 + RSA private key của họ):
+
+python
+
+metadata = {"filename": "cv.pdf", "timestamp": "2023-10-01T00:00:00Z", "ip": "123.456.789.100"}
+
+signature = RSA.sign(metadata, SHA512, applicant_private_key)
+
+Tạo session key (AES-256 key), mã hóa bằng public key của server (RSA-OAEP):
+
+python
+
+encrypted_session_key = RSA.encrypt(session_key, server_public_key, OAEP+SHA512)
+
+Gửi lên server:
+
+json
+
+{
+
+"metadata": metadata,
+
+"encrypted_session_key": "<Base64>",
+
+"signature": "<Base64>"
+
+}
+
+c. Mã hóa file & Kiểm tra toàn vẹn
+
+Ứng viên:
+
+Mã hóa file PDF bằng AES-CBC (session key + IV ngẫu nhiên).
+
+Tính hash: SHA512(IV || ciphertext).
+
+Gửi gói tin:
+
+json
+
+{
+
+"iv": "<Base64>",
+
+"ciphertext": "<Base64>",
+
+"hash": "<hex>",
+
+"signature": "<Base64_metadata_signature>"
+
+}
+
+d. Phía Server xử lý
+
+Kiểm tra IP:
+
+So khớp IP trong metadata với IP kết nối thực tế.
+
+Xác thực chữ ký:
+
+Dùng public key ứng với IP để verify signature của metadata.
+
+Giải mã session key:
+
+Dùng private key của server giải mã encrypted_session_key.
+
+Kiểm tra tính toàn vẹn:
+
+Tính lại SHA512(IV || ciphertext), so sánh với hash nhận được.
+
+Giải mã file:
+
+Dùng AES-CBC + session key + IV để giải mã file PDF.
+
+Phản hồi:
+
+Nếu thành công: Gửi ACK.
+
+Nếu thất bại: Gửi NACK + mã lỗi (ví dụ: INVALID_SIGNATURE, IP_MISMATCH).
+
+Tạo website theo ý tưởng trên sử dụng flask python và front end theo thứ tự sau:
+
+xác nhận ip -> lưu ip vào sqllite và tạo public key, private key cho ip -> upload file -> ....

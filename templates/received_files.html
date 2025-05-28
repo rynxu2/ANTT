@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-inbox me-2"></i>
+                    Received Files
+                </h4>
+                <div>
+                    <a href="{{ url_for('list_hosts') }}" class="btn btn-primary">
+                        <i class="fas fa-server me-2"></i>
+                        Manage Your Hosts
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Host Selection -->
+                {% if hosts %}
+                <div class="mb-4">
+                    <label class="form-label">Select Host to View Files:</label>
+                    <select class="form-select" id="hostSelect" onchange="this.form.submit()">
+                        <option value="">All Hosts</option>
+                        {% for host in hosts %}
+                        <option value="{{ host.id }}" {% if selected_host_id == host.id %}selected{% endif %}>
+                            {{ host.name }} ({{ host.ip_address }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                <!-- Files List -->
+                {% if received_files %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>File Name</th>
+                                <th>Sender</th>
+                                <th>Received At</th>
+                                <th>Size</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for file in received_files %}
+                            <tr>
+                                <td>
+                                    <i class="fas fa-file me-2"></i>
+                                    {{ file.filename }}
+                                </td>
+                                <td>
+                                    <code>{{ file.sender_ip }}</code>
+                                </td>
+                                <td>{{ file.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ file.file_size | filesizeformat }}</td>
+                                <td>                                    {% if file.status == 'verified' %}
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-check-circle me-1"></i>
+                                        Verified
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-warning">
+                                        <i class="fas fa-clock me-1"></i>
+                                        {{ file.status | title }}
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>                                    <div class="btn-group">
+                                        {% if file.status == 'pending' %}
+                                        <form action="{{ url_for('verify_file', session_token=file.session_token) }}" method="POST" class="d-inline verify-form">
+                                            <button type="submit" class="btn btn-sm btn-success">
+                                                <i class="fas fa-check me-1"></i>Verify
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        
+                                        <form action="{{ url_for('download_file', session_token=file.session_token) }}" method="GET" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-primary" {% if file.status != 'verified' %}disabled{% endif %}>
+                                                <i class="fas fa-download"></i>
+                                            </button>
+                                        </form>
+                                        <form action="{{ url_for('delete_received_file', file_id=file.id) }}" method="POST" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this file?')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    {% if not hosts %}
+                        You haven't created any hosts yet. <a href="{{ url_for('list_hosts') }}">Create a host</a> to start receiving files.
+                    {% else %}
+                        No files have been received yet.
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if received_files %}
+        <!-- Statistics Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>
+                    Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-3">
+                        <div class="border rounded p-3 text-center">
+                            <h6 class="text-muted mb-2">Total Files</h6>
+                            <h3>{{ stats.total_files }}</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded p-3 text-center">
+                            <h6 class="text-muted mb-2">Total Size</h6>
+                            <h3>{{ stats.total_size | filesizeformat }}</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded p-3 text-center">
+                            <h6 class="text-muted mb-2">Unique Senders</h6>
+                            <h3>{{ stats.unique_senders }}</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="border rounded p-3 text-center">
+                            <h6 class="text-muted mb-2">Last Received</h6>
+                            <h3>{{ stats.last_received.strftime('%d/%m/%Y') if stats.last_received else 'N/A' }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='received_files.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <!-- Progress Steps -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div id="headerbar" class="row text-center">
+                    <div class="col">
+                        <div class="step completed">
+                            <div class="step-icon">
+                                <i class="fas fa-network-wired"></i>
+                            </div>
+                            <h6 class="step-title">IP Verification</h6>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="step completed">
+                            <div class="step-icon">
+                                <i class="fas fa-key"></i>
+                            </div>
+                            <h6 class="step-title">Key Generation</h6>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="step completed">
+                            <div class="step-icon">
+                                <i class="fas fa-server"></i>
+                            </div>
+                            <h6 class="step-title">Select Host</h6>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="step active">
+                            <div class="step-icon">
+                                <i class="fas fa-upload"></i>
+                            </div>
+                            <h6 class="step-title">Secure Upload</h6>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="step">
+                            <div class="step-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <h6 class="step-title">Verification</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Selected Host Info -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    <i class="fas fa-server me-2"></i>
+                    Selected Destination Host
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Host Name:</strong> {{ selected_host.name }}</p>
+                        <p><strong>IP Address:</strong> <code>{{ selected_host.ip_address }}</code></p>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <a href="{{ url_for('select_host') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-exchange-alt me-2"></i>
+                            Change Host
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Upload Card -->
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    <i class="fas fa-upload me-2"></i>
+                    Upload File
+                </h4>
+            </div>
+            <div class="card-body">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-4">
+                        <div class="upload-zone p-5 text-center border rounded">
+                            <i class="fas fa-cloud-upload-alt display-4 text-muted mb-3"></i>
+                            <h5>Drag & Drop File Here</h5>
+                            <p class="text-muted">or</p>
+                            <input type="file" id="fileInput" class="d-none">
+                            <label for="fileInput" class="btn btn-primary">
+                                <i class="fas fa-folder-open me-2"></i>
+                                Browse Files
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="fileInfo" class="mb-4 d-none">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="mb-3">File Information</h5>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>Name:</strong> <span id="fileName"></span></p>
+                                        <p><strong>Size:</strong> <span id="fileSize"></span></p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>Type:</strong> <span id="fileType"></span></p>
+                                    </div>
+                                </div>
+                            </div>                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="submit" id="uploadBtn" class="btn btn-primary btn-lg">
+                            <i class="fas fa-paper-plane me-2"></i>
+                            Start Secure Transfer
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Transfer Status -->
+                <div id="transferStatus" class="mt-4 d-none">
+                    <div class="progress mb-3">
+                        <div id="uploadProgress" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p class="text-center text-muted" id="statusText"></p>
+                </div>
+
+                <!-- Success Information -->
+                <div id="successInfo" class="mt-4 d-none">
+                    <div class="alert alert-success">
+                        <h5><i class="fas fa-check-circle me-2"></i>File Transfer Complete!</h5>
+                        <p class="mb-2">Your file has been securely encrypted and uploaded.</p>
+                        <hr>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Session Information</h6>
+                                <p><strong>Session Token:</strong><br><code id="sessionToken"></code></p>
+                                <p><strong>File Hash (SHA-512):</strong><br><code id="fileHash"></code></p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Next Steps</h6>
+                                <p>The file is now encrypted and waiting for the recipient's verification.</p>
+                                <p>You can track the status in your dashboard.</p>
+                                <a href="{{ url_for('sender_dashboard') }}" class="btn btn-primary bg-primary">
+                                    <i class="fas fa-tachometer-alt me-2"></i>
+                                    Go to Dashboard
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropZone = document.querySelector('.upload-zone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const transferStatus = document.getElementById('transferStatus');
+        const successInfo = document.getElementById('successInfo');
+        
+        // Handle drag and drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-primary');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-primary');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-primary');
+            fileInput.files = e.dataTransfer.files;
+            updateFileInfo(e.dataTransfer.files[0]);
+        });
+        
+        // Handle file selection
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                updateFileInfo(e.target.files[0]);
+            }
+        });
+        
+        function updateFileInfo(file) {
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('fileType').textContent = file.type || 'Unknown';
+            fileInfo.classList.remove('d-none');
+            uploadBtn.disabled = false;
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+    });
+</script>
+{% endblock %}

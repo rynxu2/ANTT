@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-server me-2"></i>
+                    Manage Hosts
+                </h4>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addHostModal">
+                    <i class="fas fa-plus me-2"></i>
+                    Add New Host
+                </button>
+            </div>
+            <div class="card-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                {% if hosts %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>IP Address</th>
+                                <th>Description</th>
+                                <th>Public Key Status</th>
+                                <th>Created At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for host in hosts %}
+                            <tr>
+                                <td>{{ host.name }}</td>
+                                <td><code>{{ host.ip_address }}</code></td>
+                                <td>{{ host.description or 'No description' }}</td>
+                                <td>                                    {% if host.public_key %}
+                                    <span class="badge bg-success" data-bs-toggle="tooltip" title="This host can receive encrypted files">
+                                        <i class="fas fa-key me-1"></i>
+                                        Ready for Transfer
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-warning" data-bs-toggle="tooltip" title="RSA keys will be generated automatically">
+                                        <i class="fas fa-spinner fa-spin me-1"></i>
+                                        Generating Keys...
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ host.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>                                    <form action="{{ url_for('delete_host', host_id=host.id) }}" method="POST" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this host?')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    No hosts have been added yet. Click the "Add New Host" button to add one.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Host Modal -->
+<div class="modal fade" id="addHostModal" tabindex="-1" aria-labelledby="addHostModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="addHostModalLabel">
+                    <i class="fas fa-server me-2"></i>
+                    Create Receiving Point
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>            <form action="{{ url_for('add_host') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">                <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>What happens when you create a host:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>A receiving point will be set up for your current IP address</li>
+                            <li>RSA keys will be automatically generated if you don't have them</li>
+                            <li>Your public key will be available for others to send you encrypted files</li>
+                            <li>Files sent to this host will be securely encrypted using your public key</li>
+                        </ul>
+                    </div>
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Host Name</label>
+                        <input type="text" class="form-control" id="name" name="name" placeholder="e.g., My Work Computer" required>
+                        <div class="form-text">A friendly name to identify this receiving point</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">IP Address</label>
+                        <div class="form-control">{{ client_ip }}</div>
+                        <input type="hidden" name="ip_address" class="form-control" value="{{ client_ip }}">
+                        <div class="form-text">This is your current IP address</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="description" name="description" rows="3" 
+                                placeholder="e.g., Office desktop computer for receiving work files"></textarea>
+                        <div class="form-text">Add details to help others identify this receiving point</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i>
+                        Create Host
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Auto-refresh the page if there are hosts without public keys
+        if (document.querySelector('.badge.bg-warning')) {
+            setTimeout(function() {
+                location.reload();
+            }, 5000); // Refresh every 5 seconds
+        }
+    });
+</script>
+{% endblock %}
