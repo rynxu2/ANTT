@@ -1,5 +1,5 @@
 import os
-from app import app, db
+from app import app, db, socketio
 from models import Host, IPKeyMapping, UploadSession
 
 if __name__ == "__main__":
@@ -11,4 +11,5 @@ if __name__ == "__main__":
         db.create_all()
         print("Database schema updated successfully")
         
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+ 

@@ -17,11 +17,8 @@ class IPKeyMapping(db.Model):
 class UploadSession(db.Model):
     """Track file upload sessions"""
     id = db.Column(db.Integer, primary_key=True)
-    # Sender information
     sender_ip = db.Column(db.String(45), nullable=False)
-    # Receiver information
     receiver_ip = db.Column(db.String(45), nullable=False)
-    # File information
     session_token = db.Column(db.String(64), unique=True, nullable=False)
     filename = db.Column(db.String(255))
     file_hash = db.Column(db.String(128))  # SHA-512 hash
@@ -31,6 +28,7 @@ class UploadSession(db.Model):
     # Status tracking
     status = db.Column(db.String(20), default='pending')  # pending, verified, failed, downloaded
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     downloaded_at = db.Column(db.DateTime)
     
     def set_metadata(self, metadata_dict):
@@ -39,6 +37,14 @@ class UploadSession(db.Model):
     def get_metadata(self):
         return json.loads(self.file_metadata) if self.file_metadata else {}
     
+    def update_status(self, new_status):
+        """Update the status and updated_at timestamp"""
+        if self.status != new_status:
+            self.status = new_status
+            self.updated_at = datetime.utcnow()
+            return True
+        return False
+        
     def __repr__(self):
         return f'<UploadSession {self.session_token}>'
 

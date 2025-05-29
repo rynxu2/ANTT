@@ -1,148 +1,269 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-10">
-        <div class="row g-4">
-            <!-- Send New File Card -->
-            <div class="col-md-6">
-                <div class="card h-100 border-primary hover-shadow">
-                    <div class="card-body text-center p-4">
-                        <div class="display-4 mb-3 text-primary">
-                            <i class="fas fa-paper-plane"></i>
-                        </div>
-                        <h3 class="card-title mb-3">Send File</h3>
-                        <p class="card-text text-muted mb-4">
-                            Choose a destination host and send encrypted files securely.
-                        </p>
-                        <div class="mt-auto">
-                            <a href="{{ url_for('select_host') }}" class="btn btn-primary btn-lg">
-                                <i class="fas fa-upload me-2"></i>
-                                Start Transfer
-                            </a>
-                        </div>
-                    </div>
-                </div>
+<div class="container">
+    <!-- Page Header -->
+    <div class="page-header mb-4">
+        <div class="row align-items-center">
+            <div class="col">
+                <h4 class="mb-0">Sensor Dashboard</h4>
+                <p class="text-muted mb-0">Monitor and manage your file transfers</p>
             </div>
+            <div class="col-auto">
+                <a href="{{ url_for('sender_select_host') }}" class="btn btn-primary">
+                    <i class="fas fa-upload me-2"></i>
+                    New Transfer
+                </a>
+            </div>
+        </div>
+    </div>
 
-            <!-- Transfer History Card -->
-            <div class="col-md-6">
-                <div class="card h-100 border-success hover-shadow">
-                    <div class="card-body text-center p-4">
-                        <div class="display-4 mb-3 text-success">
-                            <i class="fas fa-history"></i>
-                        </div>
-                        <h3 class="card-title mb-3">Transfer History</h3>
-                        <p class="card-text text-muted mb-4">
-                            View your file transfer history and check their status.
-                        </p>
-                        <div class="mt-auto">
-                            <a href="{{ url_for('view_sessions') }}" class="btn btn-success btn-lg">
-                                <i class="fas fa-list me-2"></i>
-                                View History
-                            </a>
-                        </div>
+    <!-- Stats Cards -->
+    <div class="row g-4 mb-5">
+        <!-- Total Files -->
+        <div class="col-md-4">
+            <div class="stat-card h-100">
+                <div class="stat-card-body">
+                    <div class="stat-card-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <div class="stat-card-content">
+                        <div class="stat-card-value">{{ stats.total_files }}</div>
+                        <div class="stat-card-label">Total Files</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Recent Transfers -->
-        {% if recent_transfers %}
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h4 class="mb-0">
-                            <i class="fas fa-clock me-2"></i>
-                            Recent Transfers
-                        </h4>
-                        <a href="{{ url_for('view_sessions') }}" class="btn btn-sm btn-outline-primary">
-                            View All
-                        </a>
+        <!-- Total Size -->
+        <div class="col-md-4">
+            <div class="stat-card h-100">
+                <div class="stat-card-body">
+                    <div class="stat-card-icon bg-success-soft">
+                        <i class="fas fa-database text-success"></i>
                     </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>File</th>
-                                        <th>Recipient</th>
-                                        <th>Size</th>
-                                        <th>Status</th>
-                                        <th>Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for transfer in recent_transfers %}
-                                    <tr data-session-token="{{ transfer.session_token }}">
-                                        <td>
-                                            <i class="fas fa-file me-2"></i>
-                                            {{ transfer.filename }}
-                                        </td>
-                                        <td>
-                                            <code>{{ transfer.receiver_ip }}</code>
-                                        </td>
-                                        <td>{{ transfer.file_size | filesizeformat }}</td>
-                                        <td class="status-badge">
-                                            {% if transfer.status == 'verified' %}
-                                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Verified</span>
-                                            {% elif transfer.status == 'pending' %}
-                                            <span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Pending</span>
-                                            {% else %}
-                                            <span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Failed</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>{{ transfer.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="stat-card-content">
+                        <div class="stat-card-value">{{ stats.total_size | filesizeformat }}</div>
+                        <div class="stat-card-label">Total Size</div>
                     </div>
                 </div>
             </div>
         </div>
-        {% endif %}
+
+        <!-- Completed Transfers -->
+        <div class="col-md-4">
+            <div class="stat-card h-100">
+                <div class="stat-card-body">
+                    <div class="stat-card-icon bg-info-soft">
+                        <i class="fas fa-check-circle text-info"></i>
+                    </div>
+                    <div class="stat-card-content">
+                        <div class="stat-card-value stat-card-completed">{{ stats.completed }}</div>
+                        <div class="stat-card-label">Completed</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Transfers -->
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-history text-primary me-2"></i>
+                    <h5 class="mb-0">Recent Transfers</h5>
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-sm btn-light-primary" onclick="refreshTransfers()">
+                        <i class="fas fa-sync-alt me-2"></i>
+                        Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {% if recent_transfers %}
+            <div class="table-responsive">
+                <table class="sensor-files table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>File</th>
+                            <th>Recipient</th>
+                            <th>Size</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transfer in recent_transfers %}
+                        <tr data-session-token="{{ transfer.session_token }}" data-file-id="{{ transfer.id }}">
+                            <td>
+                                <div class="text-muted">{{ transfer.created_at.strftime('%Y-%m-%d') }}</div>
+                                <small>{{ transfer.created_at.strftime('%H:%M') }}</small>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="file-icon me-2">
+                                        <i class="fas fa-file-alt text-primary"></i>
+                                    </div>
+                                    <div class="file-info">
+                                        <div class="file-name">{{ transfer.filename }}</div>
+                                        <small class="text-muted">{{ transfer.file_size | filesizeformat }}</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="recipient-avatar me-2">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    <div class="recipient-ip">{{ transfer.receiver_ip }}</div>
+                                </div>
+                            </td>
+                            <td>{{ transfer.file_size | filesizeformat }}</td>
+                            <td>
+                                {% if transfer.status == 'verified' %}
+                                <span class="status-badge status-verified">
+                                    <i class="fas fa-check-circle me-1"></i>
+                                    Verified
+                                </span>
+                                {% elif transfer.status == 'downloaded' %}
+                                <span class="status-badge status-downloaded">
+                                    <i class="fas fa-download me-1"></i>
+                                    Downloaded
+                                </span>
+                                {% elif transfer.status == 'pending' %}
+                                <span class="status-badge status-pending">
+                                    <i class="fas fa-clock me-1"></i>
+                                    Pending
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-light" 
+                                            data-bs-toggle="tooltip" 
+                                            data-bs-title="View Details"
+                                            onclick="showTransferDetails('{{ transfer.session_token }}')">
+                                        <i class="fas fa-info-circle"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state text-center py-5">
+                <div class="empty-state-icon mb-3">
+                    <i class="fas fa-inbox fa-3x"></i>
+                </div>
+                <h5 class="empty-state-title">No Recent Transfers</h5>
+                <p class="empty-state-subtitle mb-3">Start by uploading a file to a registered host</p>
+                <a href="{{ url_for('sender_select_host') }}" class="btn btn-primary">
+                    <i class="fas fa-upload me-2"></i>
+                    Upload File
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Transfer Details Modal -->
+<div class="modal fade" id="transferDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-info-circle text-primary me-2"></i>
+                    Transfer Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="transferDetailsContent">
+                <div class="d-flex justify-content-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Poll for status updates every 5 seconds
-    setInterval(updateTransferStatus, 5000);
-
-    function updateTransferStatus() {
-        const transferRows = document.querySelectorAll('tr[data-session-token]');
-        transferRows.forEach(row => {
-            const sessionToken = row.getAttribute('data-session-token');
-            fetch(`/transfer_status/${sessionToken}`)
-                .then(response => response.json())
-                .then(result => {
-                    if (result.status) {
-                        const statusCell = row.querySelector('.status-badge');
-                        let badge = '';
-                        switch(result.status) {
-                            case 'verified':
-                                badge = '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Verified</span>';
-                                break;
-                            case 'pending':
-                                badge = '<span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Pending</span>';
-                                break;
-                            case 'downloaded':
-                                badge = '<span class="badge bg-primary"><i class="fas fa-download me-1"></i>Downloaded</span>';
-                                break;
-                            default:
-                                badge = '<span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>Failed</span>';
-                        }
-                        statusCell.innerHTML = badge;
-                    }
-                })
-                .catch(error => console.error('Error updating status:', error));
+function showTransferDetails(sessionToken) {
+    const modal = new bootstrap.Modal(document.getElementById('transferDetailsModal'));
+    const content = document.getElementById('transferDetailsContent');
+    
+    modal.show();
+    content.innerHTML = `
+        <div class="d-flex justify-content-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    `;
+    
+    fetch(`/transfer_status/${sessionToken}`)
+        .then(response => response.json())
+        .then(data => {
+            content.innerHTML = `
+                <div class="transfer-details">
+                    <div class="detail-item mb-3">
+                        <label class="detail-label">Status</label>
+                        <div class="detail-value">
+                            <span class="status-badge status-${data.status.toLowerCase()}">
+                                <i class="fas fa-${getStatusIcon(data.status)} me-1"></i>
+                                ${data.status}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="detail-item mb-3">
+                        <label class="detail-label">Last Updated</label>
+                        <div class="detail-value">
+                            ${new Date(data.updated_at).toLocaleString()}
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Failed to load transfer details
+                </div>
+            `;
         });
-    }
+}
+
+function getStatusIcon(status) {
+    const icons = {
+        'verified': 'check-circle',
+        'downloaded': 'download',
+        'pending': 'clock',
+        'failed': 'times-circle'
+    };
+    return icons[status.toLowerCase()] || 'info-circle';
+}
+
+function refreshTransfers() {
+    location.reload();
+}
+
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function(tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
 });
 </script>
 {% endblock %}

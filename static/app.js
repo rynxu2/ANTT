@@ -72,6 +72,9 @@ class SecureUploadClient {
         const uploadBtn = document.querySelector('#uploadBtn');
         const originalText = uploadBtn.innerHTML;
         
+        // Show loading overlay
+        document.getElementById('loading-overlay').classList.remove('d-none');
+        
         try {
             uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
             uploadBtn.disabled = true;
@@ -117,12 +120,18 @@ class SecureUploadClient {
                 // Clear file input
                 fileInput.value = '';
             } else {
-                this.showAlert('danger', result.error || 'Upload failed');
+                if (result.error && result.error.includes('pending file')) {
+                    this.showAlert('warning', result.error + ' You can go to your dashboard to manage existing files.');
+                } else {
+                    this.showAlert('danger', result.error || 'Upload failed');
+                }
             }
         } catch (error) {
             console.error('Upload error:', error);
             this.showAlert('danger', 'Upload failed: ' + error.message);
         } finally {
+            // Hide loading overlay
+            document.getElementById('loading-overlay').classList.add('d-none');
             uploadBtn.innerHTML = originalText;
             uploadBtn.disabled = false;
         }

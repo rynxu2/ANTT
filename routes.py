@@ -101,14 +101,26 @@ def sender_dashboard():
     if not ensure_sender_keys():
         flash('Error generating RSA keys. Please try again.', 'error')
     
-    # Get recent transfers by this sender
+    # Get all transfers by this sender
+    all_transfers = UploadSession.query.filter_by(sender_ip=client_ip).all()
+    
+    # Get recent transfers
     recent_transfers = UploadSession.query.filter_by(
         sender_ip=client_ip
     ).order_by(
         UploadSession.created_at.desc()
     ).limit(5).all()
     
-    return render_template('sender_dashboard.html', recent_transfers=recent_transfers)
+    # Calculate statistics
+    stats = {
+        'total_files': len(all_transfers),
+        'total_size': sum(f.file_size for f in all_transfers if f.file_size),
+        'completed': len([f for f in all_transfers if f.status in ['verified', 'downloaded']])
+    }
+    
+    return render_template('sender_dashboard.html', 
+                         recent_transfers=recent_transfers,
+                         stats=stats)
 
 @app.route('/generate_keys', methods=['POST'])
 def generate_keys():
@@ -163,12 +175,14 @@ def view_sessions():
                          step='sessions',
                          sessions=sessions)
 
-@app.route('/hosts')
-def list_hosts():
+@app.route('/receiver_hosts')
+def receiver_hosts():
     """List all hosts"""
     client_ip = get_client_ip()
     hosts = Host.query.all()
     return render_template('hosts.html', hosts=hosts, client_ip=client_ip)
+
+from events import notify_new_host, notify_status_change, notify_new_file, notify_host_deleted
 
 @app.route('/hosts/add', methods=['POST'])
 def add_host():
@@ -181,7 +195,7 @@ def add_host():
     existing_host = Host.query.filter_by(created_by=client_ip, name=name).first()
     if existing_host:
         flash('A host with this name already exists for your IP', 'error')
-        return redirect(url_for('list_hosts'))
+        return redirect(url_for('receiver_hosts'))
     
     # Check and create RSA keys if needed
     ip_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
@@ -202,7 +216,7 @@ def add_host():
             flash('RSA keys generated successfully', 'success')
         except Exception as e:
             flash(f'Error generating RSA keys: {str(e)}', 'error')
-            return redirect(url_for('list_hosts'))
+            return redirect(url_for('receiver_hosts'))
     
     # Create new host with the public key
     new_host = Host(
@@ -216,12 +230,14 @@ def add_host():
     try:
         db.session.add(new_host)
         db.session.commit()
+        # Notify all clients about the new host
+        notify_new_host(new_host)
         flash('Host added successfully', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error adding host: {str(e)}', 'error')
     
-    return redirect(url_for('list_hosts'))
+    return redirect(url_for('receiver_hosts'))
 
 @app.route('/hosts/<int:host_id>/delete', methods=['POST'])
 def delete_host(host_id):
@@ -232,20 +248,22 @@ def delete_host(host_id):
     # Only allow deletion if the host was created by the current IP
     if host.created_by != client_ip:
         flash('You can only delete hosts that you created', 'error')
-        return redirect(url_for('list_hosts'))
+        return redirect(url_for('receiver_hosts'))
     
     try:
         db.session.delete(host)
         db.session.commit()
+        # Notify all clients about the host deletion
+        notify_host_deleted(host_id)
         flash('Host deleted successfully', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error deleting host: {str(e)}', 'error')
     
-    return redirect(url_for('list_hosts'))
+    return redirect(url_for('receiver_hosts'))
 
-@app.route('/select_host')
-def select_host():
+@app.route('/sender_select_host')
+def sender_select_host():
     """Display available hosts for selection"""
     client_ip = get_client_ip()
     
@@ -267,7 +285,7 @@ def select_upload_host(host_id):
     # Check if host has public key
     if not host.public_key:
         flash('Selected host does not have a public key available', 'error')
-        return redirect(url_for('select_host'))
+        return redirect(url_for('sender_select_host'))
     
     # Store selected host and its info in session
     session['selected_host_id'] = host_id
@@ -279,10 +297,10 @@ def select_upload_host(host_id):
     app.logger.info(f"Host selected - ID: {host_id}, Name: {host.name}, IP: {host.ip_address}")
     
     # Proceed to secure upload page
-    return redirect(url_for('secure_upload'))
+    return redirect(url_for('sender_secure_upload'))
 
-@app.route('/received_files')
-def received_files():
+@app.route('/receiver_files')
+def receiver_files():
     """Display files received by the user's hosts"""
     client_ip = get_client_ip()
     
@@ -296,7 +314,7 @@ def received_files():
         # Verify ownership
         if selected_host.created_by != client_ip:
             flash('Access denied', 'error')
-            return redirect(url_for('received_files'))
+            return redirect(url_for('receiver_files'))
         
         # Get files for selected host
         received_files = UploadSession.query.filter_by(
@@ -322,32 +340,6 @@ def received_files():
                          selected_host_id=selected_host_id,
                          received_files=received_files,
                          stats=stats)
-
-
-
-@app.route('/delete_received_file/<int:file_id>', methods=['POST'])
-def delete_received_file(file_id):
-    """Delete a received file"""
-    client_ip = get_client_ip()
-    file_session = UploadSession.query.get_or_404(file_id)
-    
-    # Verify ownership through host check
-    host = Host.query.filter_by(ip_address=file_session.receiver_ip, created_by=client_ip).first()
-    if not host:
-        flash('Access denied', 'error')
-        return redirect(url_for('received_files'))
-    
-    try:
-        # Delete file from storage
-        # TODO: Implement actual file deletion
-        db.session.delete(file_session)
-        db.session.commit()
-        flash('File deleted successfully', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Error deleting file: {str(e)}', 'error')
-    
-    return redirect(url_for('received_files'))
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -377,15 +369,26 @@ def upload_file():
         app.logger.error("No host selected in session")
         return jsonify({'error': 'No host selected'}), 400
     
-    app.logger.info(f"Selected host ID: {selected_host_id}")
-    
+    # Check if sender already has an active file for this host
     host = Host.query.get(selected_host_id)
     if not host:
         app.logger.error(f"Invalid host ID: {selected_host_id}")
         return jsonify({'error': 'Invalid host'}), 400
-    
-    app.logger.info(f"Host found: {host.name} ({host.ip_address})")
 
+    sender_ip = get_client_ip()
+    existing_file = UploadSession.query.filter_by(
+        sender_ip=sender_ip,
+        receiver_ip=host.ip_address
+    ).first()
+
+    # Only allow new upload if there's no existing file or if existing file is verified/failed
+    if existing_file and existing_file.status not in ['verified', 'failed']:
+        app.logger.error(f"Sender {sender_ip} already has a pending file for host {host.ip_address}")
+        return jsonify({
+            'error': 'You already have a pending file for this host. Please wait for verification or mark it as failed before uploading a new file.'
+        }), 400
+
+    # Continue with file upload if validation passes...
     temp_path = None
     encrypted_path = None
     try:
@@ -419,9 +422,7 @@ def upload_file():
         with open(encrypted_path, 'wb') as f:
             f.write(encrypted_data)
         
-        app.logger.info(f"Encrypted file saved at: {encrypted_path}")
-        
-        # Create session record
+        app.logger.info(f"Encrypted file saved at: {encrypted_path}")            # Create session record
         upload_session = UploadSession(
             sender_ip=get_client_ip(),
             receiver_ip=host.ip_address,
@@ -442,6 +443,14 @@ def upload_file():
         
         db.session.add(upload_session)
         db.session.commit()
+        
+        # Notify about new file upload
+        app.logger.info("Emitting new_file event")
+        try:
+            notify_new_file(upload_session)
+            app.logger.info(f"New file event emitted for session: {upload_session.session_token}")
+        except Exception as notify_error:
+            app.logger.error(f"Error sending new file notification: {str(notify_error)}")
         app.logger.info("Upload session created and saved")
         
         return jsonify({
@@ -482,18 +491,18 @@ def upload_file():
 @app.route('/download/<session_token>')
 def download_file(session_token):
     """Handle secure file download"""
-    # Get upload session
-    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
-    if not upload_session:
-        return jsonify({'error': 'Invalid session token'}), 404
-    
-    # Verify recipient
-    client_ip = get_client_ip()
-    if upload_session.receiver_ip != client_ip:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     try:
+        # Get upload session
+        upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+        if not upload_session:
+            return jsonify({'error': 'Invalid session token'}), 404
+        
+        # Only verified files can be downloaded
+        if upload_session.status != 'verified':
+            return jsonify({'error': 'File not verified'}), 400
+        
         # Get recipient's key mapping
+        client_ip = get_client_ip()
         key_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
         if not key_mapping:
             return jsonify({'error': 'Recipient keys not found'}), 404
@@ -503,13 +512,13 @@ def download_file(session_token):
         iv = base64.b64decode(metadata['iv'])
         encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])
         
-        # Decrypt session key with recipient's private key
+        # Decrypt session key
         session_key = decrypt_with_private_key(
             encrypted_session_key,
             key_mapping.private_key_pem
         )
         
-        # Read and decrypt file
+        # Decrypt file
         with open(upload_session.filepath, 'rb') as f:
             encrypted_data = f.read()
         
@@ -524,9 +533,21 @@ def download_file(session_token):
             file_stream = io.BytesIO(decrypted_data)
             
             # Update session status only after successful decryption
-            upload_session.status = 'downloaded'
+            upload_session.update_status('downloaded')
             upload_session.downloaded_at = datetime.utcnow()
             db.session.commit()
+            
+            # Notify clients about status change
+            notify_status_change(upload_session)
+            
+            app.logger.info(f"File download started: {upload_session.session_token}")
+            
+            # Notify all clients about the status change
+            try:
+                notify_status_change(upload_session)
+                app.logger.info(f"Download status change notification sent for session: {upload_session.session_token}")
+            except Exception as notify_error:
+                app.logger.error(f"Error sending download status notification: {str(notify_error)}")
             
             # Send decrypted file
             response = send_file(
@@ -546,35 +567,38 @@ def download_file(session_token):
                     upload_session.status = 'verified'
                     upload_session.downloaded_at = None
                     db.session.commit()
-                    
+                    # Notify about status reset
+                    notify_status_change(upload_session)
+            
             return response
             
         except Exception as e:
-            # Reset status if anything fails during the download process
             db.session.rollback()
             upload_session.status = 'verified'
             upload_session.downloaded_at = None
             db.session.commit()
+            # Notify about status reset
+            notify_status_change(upload_session)
             raise
         
     except Exception as e:
         app.logger.error(f"Download error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-@app.route('/secure_upload')
-def secure_upload():
+@app.route('/sender_secure_upload')
+def sender_secure_upload():
     """Show the secure file upload page"""
     # Check if a host is selected
     selected_host_id = session.get('selected_host_id')
     if not selected_host_id:
         flash('Please select a host first.', 'warning')
-        return redirect(url_for('select_host'))
+        return redirect(url_for('sender_select_host'))
     
     # Get host information
     selected_host = Host.query.get(selected_host_id)
     if not selected_host:
         flash('Selected host not found.', 'error')
-        return redirect(url_for('select_host'))
+        return redirect(url_for('sender_select_host'))
     
     # Check if sender has keys
     client_ip = get_client_ip()
@@ -630,13 +654,24 @@ def verify_file(session_token):
             return jsonify({'error': 'File decryption test failed'}), 400
             
         # If we got here, decryption works - mark as verified
-        upload_session.status = 'verified'
+        upload_session.update_status('verified')
         db.session.commit()
+        
+        app.logger.info(f"File verified successfully: {upload_session.session_token}")
+        
+        # Notify all clients about the status change
+        try:
+            notify_status_change(upload_session)
+            app.logger.info(f"Status change notification sent for session: {upload_session.session_token}")
+        except Exception as notify_error:
+            app.logger.error(f"Error sending status change notification: {str(notify_error)}")
         
         return jsonify({
             'message': 'File verified successfully',
             'filename': upload_session.filename,
-            'file_size': upload_session.file_size
+            'file_size': upload_session.file_size,
+            'status': upload_session.status,
+            'session_token': upload_session.session_token
         })
         
     except Exception as e:
@@ -663,6 +698,33 @@ def transfer_status(session_token):
     return jsonify({
         'status': upload_session.status,
         'updated_at': upload_session.created_at.isoformat()
+    })
+
+@app.route('/mark_file_failed/<int:file_id>', methods=['POST'])
+def mark_file_failed(file_id):
+    """Mark a file as failed"""
+    client_ip = get_client_ip()
+    
+    # Find the file
+    file = UploadSession.query.filter_by(id=file_id).first()
+    if not file:
+        return jsonify({"error": "File not found"}), 404
+    
+    # Check if the client is the receiver of this file
+    if file.receiver_ip != client_ip:
+        return jsonify({"error": "You are not authorized to mark this file as failed"}), 403
+    
+    # Update the file status to failed
+    file.update_status('failed')
+    db.session.commit()
+    
+    # Send realtime notification to both sender and receiver
+    from event_manager import emit_status_change
+    emit_status_change(file)
+    
+    return jsonify({
+        "message": "File marked as failed successfully",
+        "status": "failed"
     })
 
 @app.errorhandler(404)
