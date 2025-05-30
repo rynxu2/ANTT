@@ -10,7 +10,6 @@ from flask_socketio import SocketIO, join_room, leave_room
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 def get_client_ip():
@@ -27,28 +26,23 @@ class Base(DeclarativeBase):
 
 db = SQLAlchemy(model_class=Base)
 
-# Create the app
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-change-in-production")
+app.secret_key = os.environ.get("SESSION_SECRET", "Av4qf48xSS")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-# Initialize CSRF protection
 csrf = CSRFProtect(app)
 
-# Configure the database
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///secure_upload.db"
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_recycle": 300,
     "pool_pre_ping": True,
 }
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'your-secret-key'  # Change in production
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['SECRET_KEY'] = 'Av4qf48x'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# Initialize the app with the extension
 db.init_app(app)
 
-# Initialize SocketIO with eventlet
 socketio = SocketIO(
     app,
     async_mode='eventlet',
@@ -59,7 +53,6 @@ socketio = SocketIO(
     ping_interval=15
 )
 
-# Socket.IO event handlers
 @socketio.on('connect')
 def handle_connect():
     client_ip = get_client_ip()
@@ -84,14 +77,3 @@ def default_error_handler(e):
     client_ip = get_client_ip()
     logging.error(f"Unhandled SocketIO error for client {client_ip}: {str(e)}")
     socketio.emit('error', {'message': 'An unexpected error occurred'}, room=client_ip)
-
-with app.app_context():
-    # Import models and routes
-    import models
-    import routes
-    
-    # Create all tables
-    db.create_all()
-
-if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)

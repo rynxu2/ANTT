@@ -112,7 +112,8 @@
                                         <p><strong>Type:</strong> <span id="fileType"></span></p>
                                     </div>
                                 </div>
-                            </div>                        </div>
+                            </div>                       
+                        </div>
                     </div>
 
                     <div class="text-center">
@@ -172,7 +173,6 @@
         const transferStatus = document.getElementById('transferStatus');
         const successInfo = document.getElementById('successInfo');
         
-        // Handle drag and drop
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             dropZone.classList.add('border-primary');
@@ -188,11 +188,63 @@
             fileInput.files = e.dataTransfer.files;
             updateFileInfo(e.dataTransfer.files[0]);
         });
-        
-        // Handle file selection
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 updateFileInfo(e.target.files[0]);
+            }
+        });
+
+        const uploadForm = document.getElementById('uploadForm');
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const file = fileInput.files[0];
+            if (!file) {
+                showAlert('warning', 'Please select a file first.');
+                return;
+            }
+            
+            formData.append('file', file);
+            
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+            
+            uploadBtn.disabled = true;
+            const originalBtnText = uploadBtn.innerHTML;
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    uploadForm.classList.add('d-none');
+                    
+                    document.getElementById('sessionToken').textContent = result.session_token;
+                    document.getElementById('fileHash').textContent = result.file_hash;
+                    successInfo.classList.remove('d-none');
+                    
+                    showAlert('success', 'File uploaded successfully!');
+                } else {
+                    if (result.status === 'pending') {
+                        showAlert('warning', 'You already have a pending file transfer. Please wait for verification or mark it as failed before uploading a new file.');
+                    } else {
+                        showAlert('danger', result.error || 'Upload failed');
+                    }
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showAlert('danger', 'Upload failed: ' + error.message);
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = originalBtnText;
             }
         });
         
@@ -203,13 +255,31 @@
             fileInfo.classList.remove('d-none');
             uploadBtn.disabled = false;
         }
-        
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 Bytes';
             const k = 1024;
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function showAlert(type, message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : 
+                               type === 'warning' ? 'fa-exclamation-triangle' : 
+                               'fa-exclamation-circle'} me-2"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            
+            const form = document.getElementById('uploadForm');
+            form.insertBefore(alertDiv, form.firstChild);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
         }
     });
 </script>

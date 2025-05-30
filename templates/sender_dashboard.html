@@ -110,7 +110,6 @@
                                     </div>
                                     <div class="file-info">
                                         <div class="file-name">{{ transfer.filename }}</div>
-                                        <small class="text-muted">{{ transfer.file_size | filesizeformat }}</small>
                                     </div>
                                 </div>
                             </td>
@@ -138,6 +137,11 @@
                                 <span class="status-badge status-pending">
                                     <i class="fas fa-clock me-1"></i>
                                     Pending
+                                </span>
+                                {% elif transfer.status == 'failed' %}
+                                <span class="status-badge status-failed">
+                                    <i class="fas fa-times-circle me-1"></i>
+                                    Failed
                                 </span>
                                 {% endif %}
                             </td>
@@ -258,7 +262,6 @@ function refreshTransfers() {
     location.reload();
 }
 
-// Initialize tooltips
 document.addEventListener('DOMContentLoaded', function() {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function(tooltipTriggerEl) {

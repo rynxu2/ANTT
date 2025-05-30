@@ -1,6 +1,5 @@
-// Realtime updates using Socket.IO
 class RealtimeClient {
-    constructor() {        // Singleton pattern để đảm bảo chỉ có một kết nối socket
+    constructor() {
         if (window.socket) {
             this.socket = window.socket;
         } else {
@@ -15,7 +14,6 @@ class RealtimeClient {
             window.socket = this.socket;
         }
         
-        // Đảm bảo chỉ có một instance của RealtimeClient
         if (window.realtimeClient) {
             return window.realtimeClient;
         }
@@ -27,7 +25,6 @@ class RealtimeClient {
     }
 
     initializeUIElements() {
-        // Add connection status indicator
         const statusDiv = document.createElement('div');
         statusDiv.id = 'connection-status';
         statusDiv.className = 'connection-status disconnected';
@@ -39,11 +36,9 @@ class RealtimeClient {
     }
 
     initializeEventHandlers() {
-        // Connection events
         this.socket.on('connect', () => {
             console.log('Connected to server');
             this.updateConnectionStatus('connected');
-            // Join room based on client IP
             this.socket.emit('join', { room: this.getClientIP() });
         });
 
@@ -62,7 +57,6 @@ class RealtimeClient {
             this.updateConnectionStatus('reconnecting');
         });
 
-        // New host notification
         this.socket.on('new_host', (data) => {
             this.handleNewHost(data);
         });
@@ -71,7 +65,6 @@ class RealtimeClient {
             this.handleHostDeleted(data);
         });
 
-        // Status change notification
         this.socket.on('status_change', (data) => {
             this.handleStatusChange(data);
         });
@@ -79,7 +72,6 @@ class RealtimeClient {
         let lastNewFileTimestamp = 0;
         this.socket.on('new_file', (data) => {
             const now = Date.now();
-            // Prevent duplicate events within 500ms
             if (now - lastNewFileTimestamp < 500) {
                 console.log('Ignoring duplicate new_file event');
                 return;
@@ -89,7 +81,6 @@ class RealtimeClient {
             this.handleNewFile(data);
         });
 
-        // Add loading state handlers
         this.socket.on('action_start', (data) => {
             this.showLoading(data.action);
         });
@@ -111,7 +102,6 @@ class RealtimeClient {
     }
 
     showLoading(action) {
-        // Add loading spinner to relevant section
         const actionArea = document.querySelector(`[data-action="${action}"]`);
         if (actionArea) {
             actionArea.classList.add('loading');
@@ -122,7 +112,6 @@ class RealtimeClient {
     }
 
     hideLoading(action) {
-        // Remove loading spinner
         const actionArea = document.querySelector(`[data-action="${action}"]`);
         if (actionArea) {
             actionArea.classList.remove('loading');
@@ -132,27 +121,24 @@ class RealtimeClient {
     }
 
     handleHostDeleted(data) {
-        // Remove host from select host page
         const isSelectHostPage = document.querySelector('.step.active .step-icon i.fas.fa-server') !== null;
         if (isSelectHostPage) {
             const hostElement = document.querySelector(`.card-body form[action="/select_host/${data.id}"]`)?.closest('.col');
             if (hostElement) {
                 hostElement.remove();
                 
-                // Check if there are no more hosts
                 const hostContainer = document.querySelector('.row.row-cols-1.row-cols-md-2.row-cols-lg-3.g-4');
                 if (hostContainer && !hostContainer.children.length) {
                     const cardBody = hostContainer.parentElement;
                     hostContainer.remove();
                     
-                    // Show "no hosts" message
                     cardBody.innerHTML = `
                         <div class="text-center">
                             <div class="alert alert-info">
                                 <i class="fas fa-info-circle me-2"></i>
                                 No hosts are available for file transfer. Ask your intended recipient to register as a host first.
                             </div>
-                            <img src="https://cdn.replit.com/agent/empty-state.svg" alt="No hosts" class="img-fluid mb-3" style="max-width: 200px;">
+                            <img src="https://www.carolijamora.com/build/images/background/no-results-bg.2d2c6ee3.png" alt="No hosts" class="img-fluid mb-3" style="max-width: 200px;">
                             <p class="text-muted">
                                 To send files, you need a recipient who has registered as a host. Once they register, their host will appear here.
                             </p>
@@ -166,7 +152,6 @@ class RealtimeClient {
             }
         }
 
-        // Remove host from hosts list page
         const hostsList = document.querySelector('.hosts-list');
         if (hostsList) {
             const hostElement = hostsList.querySelector(`[data-id="${data.id}"]`)?.closest('.col-md-6');
@@ -175,19 +160,16 @@ class RealtimeClient {
             }
         }
 
-        // Show notification
         showAlert('info', 'A host has been removed');
     }
 
     handleNewHost(data) {
-        // Check for existing host first
         const existingHost = document.querySelector(`[data-host-id="${data.id}"]`);
         if (existingHost) {
             console.log(`Host ${data.id} already exists, skipping addition`);
             return;
         }
 
-        // Handle hosts list page (dành cho trang quản lý host của receiver)
         const hostsList = document.querySelector('.hosts-list');
         if (hostsList) {
             const newHostHtml = `
@@ -216,7 +198,6 @@ class RealtimeClient {
             `;
             hostsList.insertAdjacentHTML('afterbegin', newHostHtml);
 
-            // Reinitialize delete button event listener
             const newDeleteButton = hostsList.querySelector(`[data-id="${data.id}"]`);
             if (newDeleteButton) {
                 newDeleteButton.addEventListener('click', () => {
@@ -227,7 +208,6 @@ class RealtimeClient {
             }
         }
 
-        // Handle select host page (dành cho trang chọn host của sender)
         const isSelectHostPage = document.querySelector('.step.active .step-icon i.fas.fa-server') !== null;
         if (!isSelectHostPage) return;
 
@@ -267,7 +247,6 @@ class RealtimeClient {
             </div>
         `;
 
-        // Handle no hosts case
         let hostContainer = cardBody.querySelector('.row.row-cols-1.row-cols-md-2.row-cols-lg-3.g-4');
         const noHostsElements = cardBody.querySelector('.text-center');
 
@@ -287,7 +266,6 @@ class RealtimeClient {
     handleStatusChange(data) {        
         console.log("Status change received:", data);
 
-        // Update stats if status is 'verified'
         if (data.status === 'verified') {
             const completedStats = document.querySelector('.stat-card-completed');
             if (completedStats) {
@@ -335,7 +313,6 @@ class RealtimeClient {
                     <i class="fas fa-${config.icon} me-1"></i>
                     ${config.text}
                 </span>`;
-              // Apply status change with animation
             const oldBadge = statusCell.querySelector('.badge');
             if (oldBadge) {
                 oldBadge.classList.add('status-change');
@@ -349,7 +326,7 @@ class RealtimeClient {
                 }, 150);
             } else {
                 statusCell.innerHTML = statusHtml;
-            }              // Show notification based on status
+            }
             const notifications = {
                 'verified': { 
                     type: 'success', 
@@ -375,7 +352,6 @@ class RealtimeClient {
 
             const notification = notifications[data.status];
             if (notification) {
-                // Kiểm tra xem đã có thông báo tương tự chưa
                 const existingAlerts = document.querySelectorAll('.alert');
                 let isDuplicate = false;
                 
@@ -388,13 +364,11 @@ class RealtimeClient {
                 if (!isDuplicate) {
                     showAlert(notification.type, notification.message);
                     
-                    // Play notification sound if enabled
                     if (notification.sound && window.notificationSounds?.[notification.sound]) {
                         window.notificationSounds[notification.sound].play().catch(e => console.log('Sound play error:', e));
                     }
                 }
                 
-                // Add to notification history
                 const notificationList = document.querySelector('.notification-list');
                 if (notificationList) {
                     const notificationItem = document.createElement('div');
@@ -407,7 +381,6 @@ class RealtimeClient {
                     `;
                     notificationList.insertBefore(notificationItem, notificationList.firstChild);
                     
-                    // Remove old notifications (keep last 5)
                     while (notificationList.children.length > 5) {
                         notificationList.removeChild(notificationList.lastChild);
                     }
@@ -417,7 +390,6 @@ class RealtimeClient {
             console.log("Status cell updated with animation");
         }
 
-        // Update actions based on status
         if (window.location.pathname.includes('/receiver_files')) {
             const actionCell = fileRow.querySelector('td:last-child');
             if (actionCell) {
@@ -463,8 +435,6 @@ class RealtimeClient {
                                     throw new Error('Failed to update file status');
                                 })
                                 .then(result => {
-                                    // Don't show alert here - it will come from the status_change event
-                                    // Update the status badge
                                     const statusCell = fileRow.querySelector('td:nth-child(5)');
                                     if (statusCell) {
                                         statusCell.innerHTML = `
@@ -473,7 +443,6 @@ class RealtimeClient {
                                             </span>
                                         `;
                                     }
-                                    // Trigger the status change animation
                                     this.highlightRow(fileRow, 'failed');
                                 })
                                 .catch(error => {
@@ -497,10 +466,8 @@ class RealtimeClient {
     }
 
     highlightRow(row, status) {
-        // Remove any existing highlight classes
         row.classList.remove('highlight-success', 'highlight-warning', 'highlight-danger');
         
-        // Add appropriate highlight class based on status
         const highlightClass = {
             'verified': 'highlight-success',
             'downloaded': 'highlight-success',
@@ -511,62 +478,57 @@ class RealtimeClient {
         row.classList.add(highlightClass);
         row.classList.add('highlight');
         
-        // Remove highlight classes after animation
         setTimeout(() => {
             row.classList.remove('highlight', highlightClass);
         }, 2000);
     }
 
     handleNewFile(data) {
-        const fileKey = `${data.session_token}-${data.created_at}`;
-        if (this.processedFiles.has(fileKey)) {
-            console.log('File đã được xử lý trước đó:', fileKey);
-            return;
-        }
+        if (window.location.pathname.includes('/receiver_files')) {
+            const fileKey = `${data.session_token}-${data.created_at}`;
+            if (this.processedFiles.has(fileKey)) {
+                console.log('File đã được xử lý trước đó:', fileKey);
+                return;
+            }
 
-        // Đánh dấu file đã được xử lý
-        this.processedFiles.add(fileKey);
-        console.log('Xử lý file mới:', fileKey);
+            this.processedFiles.add(fileKey);
+            console.log('Xử lý file mới:', fileKey);
 
-        // Hide empty state if exists
-        const emptyState = document.querySelector('.empty-state');
-        if (emptyState) {
-            emptyState.style.display = 'none';
-        }
+            const emptyState = document.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.style.display = 'none';
+            }
 
-        // Get or create table container
-        let tableContainer = document.querySelector('.table-responsive');
-        if (!tableContainer) {
-            tableContainer = document.createElement('div');
-            tableContainer.className = 'table-responsive';
-            const cardBody = document.querySelector('.card-body');
-            if (cardBody) {
-                if (emptyState) {
-                    cardBody.insertBefore(tableContainer, emptyState);
-                } else {
-                    cardBody.appendChild(tableContainer);
+            let tableContainer = document.querySelector('.table-responsive');
+            if (!tableContainer) {
+                tableContainer = document.createElement('div');
+                tableContainer.className = 'table-responsive';
+                const cardBody = document.querySelector('.card-body');
+                if (cardBody) {
+                    if (emptyState) {
+                        cardBody.insertBefore(tableContainer, emptyState);
+                    } else {
+                        cardBody.appendChild(tableContainer);
+                    }
                 }
             }
-        }
 
-        // Create table if it doesn't exist
-        let table = tableContainer.querySelector('.table');
-        if (!table) {
-            table = this.createFileTable();
-            tableContainer.appendChild(table);
-        }
+            let table = tableContainer.querySelector('.table');
+            if (!table) {
+                table = this.createFileTable();
+                tableContainer.appendChild(table);
+            }
 
-        // Add new file row
-        const tbody = table.querySelector('tbody');
-        if (tbody) {
-            const tr = this.createFileRow(data);
-            tbody.insertBefore(tr, tbody.firstChild);
-        }
+            const tbody = table.querySelector('tbody');
+            if (tbody) {
+                const tr = this.createFileRow(data);
+                tbody.insertBefore(tr, tbody.firstChild);
+            }
 
-        // Remove processedFile after a delay to prevent memory leaks
-        setTimeout(() => {
-            this.processedFiles.delete(fileKey);
-        }, 5000); // Xóa sau 5 giây
+            setTimeout(() => {
+                this.processedFiles.delete(fileKey);
+            }, 5000);
+        }
     }
 
     createFileTable() {
@@ -585,7 +547,9 @@ class RealtimeClient {
             <tbody></tbody>
         `;
         return table;
-    }    createFileRow(data) {
+    }    
+    
+    createFileRow(data) {
         const tr = document.createElement('tr');
         tr.setAttribute('data-session-token', data.session_token);
         tr.setAttribute('data-file-id', data.id);
@@ -650,20 +614,18 @@ class RealtimeClient {
             </td>
         `;
 
-        // Initialize tooltips for the new buttons
         const tooltips = tr.querySelectorAll('[data-bs-toggle="tooltip"]');
         tooltips.forEach(el => new bootstrap.Tooltip(el));
 
-        // Add event listeners for the new buttons
         this.initializeFileRowButtons(tr);
 
         return tr;
     }
 
     initializeFileRowButtons(row) {
-        // Verify button 
         const verifyBtn = row.querySelector('.verify-btn');
-        if (verifyBtn) {            verifyBtn.addEventListener('click', () => {
+        if (verifyBtn) {            
+            verifyBtn.addEventListener('click', () => {
                 const sessionToken = verifyBtn.dataset.sessionToken;
                 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
                 fetch(`/verify_file/${sessionToken}`, {
@@ -680,14 +642,12 @@ class RealtimeClient {
             });
         }
 
-        // Download button
         const downloadBtn = row.querySelector('.download-btn');
         if (downloadBtn) {
             downloadBtn.addEventListener('click', async function() {
                 if (!this.disabled) {
                     const sessionToken = this.dataset.sessionToken;
                     try {
-                        // Update UI immediately
                         const statusCell = row.querySelector('td:nth-child(4)');
                         if (statusCell) {
                             statusCell.innerHTML = `
@@ -697,10 +657,7 @@ class RealtimeClient {
                                 </span>
                             `;
                         }
-
-                        // Open download in new tab
                         window.open(`/download/${sessionToken}`, '_blank');
-
                     } catch (error) {
                         console.error('Download error:', error);
                         showAlert('danger', 'Error downloading file');
@@ -709,13 +666,13 @@ class RealtimeClient {
             });
         }
 
-        // Mark as failed button
         const markFailedBtn = row.querySelector('.mark-failed-btn');
         if (markFailedBtn) {
             markFailedBtn.addEventListener('click', () => {
                 const fileId = markFailedBtn.dataset.id;
                 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-                if (confirm('Are you sure you want to mark this file as failed?')) {                    fetch(`/mark_file_failed/${fileId}`, {
+                if (confirm('Are you sure you want to mark this file as failed?')) {                    
+                    fetch(`/mark_file_failed/${fileId}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -724,7 +681,6 @@ class RealtimeClient {
                     }).then(response => {
                         if (response.ok) {
                             console.log('File marked as failed');
-                            // Update the status badge
                             const statusCell = row.querySelector('td:nth-child(4)');
                             if (statusCell) {
                                 statusCell.innerHTML = `
@@ -734,7 +690,6 @@ class RealtimeClient {
                                     </span>
                                 `;
                             }
-                            // Update the action buttons
                             const btnGroup = markFailedBtn.closest('.btn-group');
                             if (btnGroup) {
                                 btnGroup.innerHTML = `
@@ -746,7 +701,6 @@ class RealtimeClient {
                                     </button>
                                 `;
                             }
-                            // Show notification
                             showAlert('warning', 'File marked as failed');
                         }
                     }).catch(error => {
@@ -805,7 +759,6 @@ class RealtimeClient {
     }
 
     updateFileStatistics(newFileData) {
-        // Tìm các phần tử statistics
         const statsElements = {
             totalFiles: document.querySelector('.card-body .col-md-3:nth-child(1) h3'),
             totalSize: document.querySelector('.card-body .col-md-3:nth-child(2) h3'),
@@ -813,7 +766,6 @@ class RealtimeClient {
             lastReceived: document.querySelector('.card-body .col-md-3:nth-child(4) h3')
         };
 
-        // Nếu không có statistics card, tạo mới
         if (!statsElements.totalFiles?.closest('.card')) {
             const statsCard = `
                 <div class="card">
@@ -857,7 +809,6 @@ class RealtimeClient {
             return;
         }
 
-        // Cập nhật statistics hiện có
         if (statsElements.totalFiles) {
             const currentTotal = parseInt(statsElements.totalFiles.textContent);
             statsElements.totalFiles.textContent = (currentTotal + 1).toString();
@@ -889,7 +840,6 @@ class RealtimeClient {
     }
 
     getClientIP() {
-        // Get the client IP from a meta tag in the HTML
         const ipMetaTag = document.querySelector('meta[name="client-ip"]');
         if (ipMetaTag) {
             return ipMetaTag.getAttribute('content');
@@ -909,10 +859,9 @@ class RealtimeClient {
     }
 }
 
-// Notification manager to prevent duplicates
 const notificationManager = {
     lastNotifications: {},
-    debounceTime: 3000, // 3 seconds
+    debounceTime: 3000,
 
     canShow(message) {
         const now = Date.now();
@@ -926,7 +875,6 @@ const notificationManager = {
     }
 };
 
-// Helper function to show alerts with duplicate prevention
 function showAlert(type, message) {
     if (!notificationManager.canShow(message)) {
         return;
@@ -939,11 +887,9 @@ function showAlert(type, message) {
         </div>
     `;
     
-    // Insert at the top of the container
     const container = document.querySelector('.container');
     container.insertAdjacentHTML('afterbegin', alertHtml);
     
-    // Auto-dismiss after 5 seconds
     setTimeout(() => {
         const alert = container.querySelector('.alert');
         if (alert) {
@@ -952,7 +898,6 @@ function showAlert(type, message) {
     }, 5000);
 }
 
-// Add CSS for status change highlight animation
 const style = document.createElement('style');
 style.textContent = `    .highlight {
         animation: highlight-fade 2s ease-in-out;
@@ -1023,7 +968,6 @@ style.textContent = `    .highlight {
 `;
 document.head.appendChild(style);
 
-// Initialize realtime functionality when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     window.realtimeClient = new RealtimeClient();
 });

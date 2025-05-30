@@ -4,13 +4,12 @@ import base64
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 import secrets
 
-def generate_rsa_keypair(key_size=4096):
-    """Generate RSA key pair and return PEM encoded strings (4096 bits for better security)"""
+def generate_rsa_keypair(key_size=1024):
+    """Generate RSA key pair and return PEM encoded strings (1024 bits for better security)"""
     private_key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=key_size,
@@ -19,7 +18,6 @@ def generate_rsa_keypair(key_size=4096):
     
     public_key = private_key.public_key()
     
-    # Serialize to PEM format
     private_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
@@ -52,7 +50,6 @@ def encrypt_with_public_key(data, public_key_pem):
     """Encrypt data with RSA public key using OAEP padding"""
     public_key = load_public_key_from_pem(public_key_pem)
     
-    # Ensure data is bytes
     if isinstance(data, str):
         data = data.encode('utf-8')
     elif not isinstance(data, bytes):
@@ -65,8 +62,8 @@ def encrypt_with_public_key(data, public_key_pem):
         ciphertext = public_key.encrypt(
             data,
             padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),  # Changed to SHA256
-                algorithm=hashes.SHA256(),  # Changed to SHA256
+                mgf=padding.MGF1(algorithm=hashes.SHA512()),
+                algorithm=hashes.SHA512(),
                 label=None
             )
         )
@@ -87,8 +84,8 @@ def decrypt_with_private_key(ciphertext, private_key_pem):
         plaintext = private_key.decrypt(
             ciphertext,
             padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),  # Changed to match encryption
-                algorithm=hashes.SHA256(),  # Changed to match encryption
+                mgf=padding.MGF1(algorithm=hashes.SHA512()),
+                algorithm=hashes.SHA512(),
                 label=None
             )
         )
@@ -136,14 +133,13 @@ def verify_signature(data, signature, public_key_pem):
 
 def generate_session_key():
     """Generate a random 256-bit AES key"""
-    return secrets.token_bytes(32)  # 256 bits
+    return secrets.token_bytes(32)
 
 def encrypt_file_aes(file_data, key, iv=None):
     """Encrypt file data using AES-256-CBC"""
     if iv is None:
-        iv = secrets.token_bytes(16)  # 128-bit IV for AES
+        iv = secrets.token_bytes(16)
     
-    # Pad the data to be multiple of 16 bytes (PKCS7 padding)
     padding_length = 16 - (len(file_data) % 16)
     padded_data = file_data + bytes([padding_length]) * padding_length
     
@@ -169,7 +165,6 @@ def decrypt_file_aes(ciphertext, key, iv):
     decryptor = cipher.decryptor()
     padded_data = decryptor.update(ciphertext) + decryptor.finalize()
     
-    # Remove PKCS7 padding
     padding_length = padded_data[-1]
     file_data = padded_data[:-padding_length]
     

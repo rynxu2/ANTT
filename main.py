@@ -1,9 +1,7 @@
 import os
 from app import app, db, socketio
-from models import Host, IPKeyMapping, UploadSession
 
 if __name__ == "__main__":
-    # Drop all tables and create new ones with updated schema
     with app.app_context():
         print("Dropping all tables...")
         db.drop_all()

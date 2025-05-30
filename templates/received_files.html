@@ -91,6 +91,11 @@
                                             <i class="fas fa-times-circle"></i>
                                             Failed
                                         </span>
+                                    {% elif file.status == 'downloaded' %}
+                                        <span class="status-badge status-downloaded">
+                                            <i class="fas fa-download"></i>
+                                            Downloaded
+                                        </span>
                                     {% else %}
                                         <span class="status-badge status-pending">
                                             <i class="fas fa-clock"></i>
@@ -152,11 +157,10 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function(tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
-    });    // Handle verify form submissions
+    });
     document.querySelectorAll('.verify-form').forEach(form => {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -192,8 +196,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
-
-    // Handle download button clicks    
+  
     document.querySelectorAll('.download-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             if (!this.disabled) {

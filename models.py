@@ -5,9 +5,9 @@ import json
 class IPKeyMapping(db.Model):
     """Store RSA key pairs for each IP address"""
     id = db.Column(db.Integer, primary_key=True)
-    ip_address = db.Column(db.String(45), unique=True, nullable=False)  # IPv4/IPv6
+    ip_address = db.Column(db.String(45), unique=True, nullable=False)
     public_key_pem = db.Column(db.Text, nullable=False)
-    private_key_pem = db.Column(db.Text, nullable=False)  # In production, encrypt this
+    private_key_pem = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_used = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -21,12 +21,11 @@ class UploadSession(db.Model):
     receiver_ip = db.Column(db.String(45), nullable=False)
     session_token = db.Column(db.String(64), unique=True, nullable=False)
     filename = db.Column(db.String(255))
-    file_hash = db.Column(db.String(128))  # SHA-512 hash
-    file_size = db.Column(db.Integer)  # File size in bytes
-    file_metadata = db.Column(db.Text)  # JSON metadata
-    filepath = db.Column(db.String(512))  # Path to stored file
-    # Status tracking
-    status = db.Column(db.String(20), default='pending')  # pending, verified, failed, downloaded
+    file_hash = db.Column(db.String(128))
+    file_size = db.Column(db.Integer)
+    file_metadata = db.Column(db.Text)
+    filepath = db.Column(db.String(512))
+    status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     downloaded_at = db.Column(db.DateTime)
@@ -56,7 +55,7 @@ class Host(db.Model):
     description = db.Column(db.Text)
     public_key = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    created_by = db.Column(db.String(45))  # IP address of the creator
+    created_by = db.Column(db.String(45))
     
     def __repr__(self):
         return f'<Host {self.name} ({self.ip_address})>'

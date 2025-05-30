@@ -4,7 +4,7 @@ from app import socketio, db
 
 def notify_new_host(host_data):
     """Emit event when a new host is created"""
-    # Convert to dict and handle datetime
+
     host_dict = {
         'id': host_data.id,
         'name': host_data.name,
@@ -13,12 +13,12 @@ def notify_new_host(host_data):
         'created_by': host_data.created_by,
         'created_at': host_data.created_at.isoformat(),
         'public_key': bool(host_data.public_key)
-    }    # Broadcast to all clients
+    }
     socketio.emit('new_host', host_dict, namespace='/', to=None)
     logging.info(f"Emitted new_host event: {host_dict}")
 
 def notify_host_deleted(host_id):
-    """Emit event when a host is deleted"""    # Broadcast to all clients
+    """Emit event when a host is deleted"""
     socketio.emit('host_deleted', {'id': host_id}, namespace='/', to=None)
     logging.info(f"Emitted host_deleted event for host ID: {host_id}")
 
@@ -48,7 +48,6 @@ def notify_action_end(client_ip, action, success=True, error_message=None):
 def notify_new_file(file_data):
     """Emit event when a new file is uploaded"""
     try:
-        # Create a complete data dictionary for the file
         file_dict = {
             'id': file_data.id,
             'session_token': file_data.session_token,
@@ -61,7 +60,6 @@ def notify_new_file(file_data):
             'host_id': file_data.host_id if hasattr(file_data, 'host_id') else None,
         }
         
-        # Send to receiver only once
         logging.info(f"Emitting new_file event to receiver {file_data.receiver_ip}")
         socketio.emit('new_file', file_dict, room=file_data.receiver_ip, namespace='/')
         logging.info(f"New file event emitted successfully")
@@ -80,12 +78,10 @@ def notify_status_change(session_data):
         return
         
     try:
-        # Ensure updated_at is set
         if not session_data.updated_at:
             session_data.updated_at = datetime.utcnow()
             db.session.commit()
         
-        # Validate required IPs
         client_ips = [ip for ip in [session_data.sender_ip, session_data.receiver_ip] if ip]
         if not client_ips:
             logging.error("No valid client IPs found in session data")
@@ -114,7 +110,6 @@ def notify_status_change(session_data):
             
     except Exception as e:
         logging.error(f"Error in notify_status_change: {str(e)}")
-        # Try to notify clients even in case of error
         for client_ip in client_ips:
             try:
                 notify_action_end(client_ip, 'status-update', success=False, error_message=str(e))

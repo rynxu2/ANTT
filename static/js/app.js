@@ -1,5 +1,3 @@
-// Secure File Upload System - Client-side JavaScript
-
 class SecureUploadClient {
     constructor() {
         this.clientIP = window.serverData?.clientIP || '';
@@ -11,13 +9,11 @@ class SecureUploadClient {
     }
     
     initializeEventListeners() {
-        // Generate keys button
         const generateKeysBtn = document.getElementById('generateKeysBtn');
         if (generateKeysBtn) {
             generateKeysBtn.addEventListener('click', () => this.generateKeys());
         }
         
-        // Upload form
         const uploadForm = document.getElementById('uploadForm');
         if (uploadForm) {
             uploadForm.addEventListener('submit', (e) => this.handleFileUpload(e));
@@ -43,7 +39,6 @@ class SecureUploadClient {
             
             if (result.success) {
                 this.showAlert('success', result.message);
-                // Reload page to show the new state
                 setTimeout(() => location.reload(), 1000);
             } else {
                 this.showAlert('danger', result.message);
@@ -72,21 +67,17 @@ class SecureUploadClient {
         const uploadBtn = document.querySelector('#uploadBtn');
         const originalText = uploadBtn.innerHTML;
         
-        // Show loading overlay
         document.getElementById('loading-overlay').classList.remove('d-none');
         
         try {
             uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
             uploadBtn.disabled = true;
             
-            // Create FormData and add file
             const formData = new FormData();
             formData.append('file', file);
             
-            // Get CSRF token from meta tag
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             
-            // Upload to server
             const response = await fetch('/upload', {
                 method: 'POST',
                 headers: {
@@ -100,11 +91,9 @@ class SecureUploadClient {
             if (response.ok) {
                 this.showAlert('success', 'File uploaded successfully! Redirecting to verification...');
                 
-                // Update session info display
                 document.getElementById('sessionToken').textContent = result.session_token;
                 document.getElementById('fileHash').textContent = result.file_hash;
                 
-                // Add transition to verification step
                 const uploadStep = document.querySelector('.step.active');
                 const verificationStep = document.querySelector('.step:last-child');
                 
@@ -112,12 +101,10 @@ class SecureUploadClient {
                 uploadStep.classList.add('completed');
                 verificationStep.classList.add('active');
                 
-                // Show verification info
                 document.getElementById('uploadForm').style.display = 'none';
                 document.getElementById('successInfo').classList.remove('d-none');
                 document.querySelector('#headerbar .col:last-child .step').classList.add('completed');
                 
-                // Clear file input
                 fileInput.value = '';
             } else {
                 if (result.error && result.error.includes('pending file')) {
@@ -130,7 +117,6 @@ class SecureUploadClient {
             console.error('Upload error:', error);
             this.showAlert('danger', 'Upload failed: ' + error.message);
         } finally {
-            // Hide loading overlay
             document.getElementById('loading-overlay').classList.add('d-none');
             uploadBtn.innerHTML = originalText;
             uploadBtn.disabled = false;
@@ -148,7 +134,6 @@ class SecureUploadClient {
                 a.style.display = 'none';
                 a.href = url;
                 
-                // Get filename from content-disposition header
                 const contentDisposition = response.headers.get('content-disposition');
                 const filenameMatch = contentDisposition && contentDisposition.match(/filename="?([^"]+)"?/);
                 a.download = filenameMatch ? filenameMatch[1] : 'downloaded-file';
@@ -156,7 +141,6 @@ class SecureUploadClient {
                 document.body.appendChild(a);
                 a.click();
                 
-                // Cleanup
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
                 
@@ -171,7 +155,6 @@ class SecureUploadClient {
         }
     }
     
-    // Utility functions for crypto operations (simulated for demo)
     generateRandomKey(length) {
         const array = new Uint8Array(length);
         crypto.getRandomValues(array);
@@ -188,21 +171,17 @@ class SecureUploadClient {
     }
     
     async simulateAESEncryption(data, key, iv) {
-        // In a real implementation, this would use Web Crypto API
-        // For now, we'll return the data as is since server-side encryption is our focus
         return data;
     }
     
     async simulateSignature(data) {
-        // Simulate signature creation
         const encoder = new TextEncoder();
         const dataArray = encoder.encode(data);
-        return this.generateRandomKey(128); // Simulated signature
+        return this.generateRandomKey(128);
     }
     
     async simulateRSAEncryption(data) {
-        // Simulate RSA encryption of session key
-        return this.generateRandomKey(128); // Simulated encrypted session key
+        return this.generateRandomKey(128);
     }
     
     async calculateSHA512(data) {
@@ -274,7 +253,6 @@ class SecureUploadClient {
         resultContainer.innerHTML = content;
         resultContainer.style.display = 'block';
         
-        // Scroll to result
         resultContainer.scrollIntoView({ behavior: 'smooth' });
     }
     
@@ -286,12 +264,10 @@ class SecureUploadClient {
             </div>
         `;
         
-        // Insert at the top of the container
         const container = document.querySelector('.container');
         const existingContent = container.innerHTML;
         container.innerHTML = alertHtml + existingContent;
         
-        // Auto-dismiss after 5 seconds
         setTimeout(() => {
             const alert = container.querySelector('.alert');
             if (alert) {
@@ -302,12 +278,10 @@ class SecureUploadClient {
     }
 }
 
-// Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     new SecureUploadClient();
 });
 
-// Additional utility functions
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
         console.log('Copied to clipboard');
@@ -316,11 +290,8 @@ function copyToClipboard(text) {
     });
 }
 
-// Export for global access if needed
 window.SecureUploadClient = SecureUploadClient;
 
-
-// Recipient Management Functions
 async function addRecipient(ip, name) {
     try {
         const response = await fetch('/add_recipient', {
@@ -363,7 +334,6 @@ async function deleteRecipient(id) {
     }
 }
 
-// Event Listeners for Recipient Management
 document.addEventListener('DOMContentLoaded', () => {
     const addRecipientForm = document.getElementById('addRecipientForm');
     if (addRecipientForm) {
