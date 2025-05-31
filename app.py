@@ -12,14 +12,22 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 logging.basicConfig(level=logging.DEBUG)
 
+socketio = SocketIO(cors_allowed_origins="*")
+import ipaddress
+
 def get_client_ip():
-    """Get the real client IP address"""
+    ip = None
     if request.headers.get('X-Forwarded-For'):
-        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+        ip = request.headers.get('X-Forwarded-For').split(',')[0].strip()
     elif request.headers.get('X-Real-IP'):
-        return request.headers.get('X-Real-IP')
+        ip = request.headers.get('X-Real-IP')
     else:
-        return request.remote_addr
+        ip = request.remote_addr
+
+    try:
+        return ipaddress.ip_address(ip).exploded
+    except ValueError:
+        return None
 
 class Base(DeclarativeBase):
     pass
@@ -77,3 +85,12 @@ def default_error_handler(e):
     client_ip = get_client_ip()
     logging.error(f"Unhandled SocketIO error for client {client_ip}: {str(e)}")
     socketio.emit('error', {'message': 'An unexpected error occurred'}, room=client_ip)
+    
+with app.app_context():
+    import models
+    import routes
+    
+    db.create_all()
+
+if __name__ == "__main__":
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)

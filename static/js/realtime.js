@@ -88,6 +88,24 @@ class RealtimeClient {
         this.socket.on('action_end', (data) => {
             this.hideLoading(data.action);
         });
+
+        this.socket.on('request_approved', (data) => {
+            this.handleRequestApproved(data);
+        });
+
+        this.socket.on('request_rejected', (data) => {
+            console.log('Request rejected:', data);
+            this.handleRequestRejected(data);
+        });
+
+        this.socket.on('access_revoked', (data) => {
+            console.log('Access revoked:', data);
+            this.handleAccessRevoked(data);
+        });        
+        
+        this.socket.on('new_join_request', (data) => {
+            this.handleNewJoinRequest(data);
+        });
     }
 
     updateConnectionStatus(status) {
@@ -138,7 +156,7 @@ class RealtimeClient {
                                 <i class="fas fa-info-circle me-2"></i>
                                 No hosts are available for file transfer. Ask your intended recipient to register as a host first.
                             </div>
-                            <img src="https://www.carolijamora.com/build/images/background/no-results-bg.2d2c6ee3.png" alt="No hosts" class="img-fluid mb-3" style="max-width: 200px;">
+                            <img src="static/images/empty-hosts.svg" alt="No hosts" class="img-fluid mb-3" style="max-width: 200px;">
                             <p class="text-muted">
                                 To send files, you need a recipient who has registered as a host. Once they register, their host will appear here.
                             </p>
@@ -228,13 +246,14 @@ class RealtimeClient {
                         ${data.description ? `<p class="card-text">${data.description}</p>` : ''}
                         <div class="mt-3">
                             ${data.public_key ? `
-                                <form action="/select_host/${data.id}" method="POST" class="select-host-form">
-                                    <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
-                                    <button type="submit" class="btn btn-primary w-100">
-                                        <i class="fas fa-check-circle me-2"></i>
-                                        Select this Host
-                                    </button>
-                                </form>
+                                <form action="/host/${data.id}/request_join" method="POST" class="join-host-form">
+                                        <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
+                                        <input type="hidden" name="message" value="Hello! ${this.getClientIP()}">
+                                        <button type="submit" class="btn btn-outline-primary w-100">
+                                            <i class="fas fa-paper-plane me-1"></i>
+                                            Request Access
+                                        </button>
+                                    </form>
                             ` : `
                                 <button class="btn btn-warning w-100" disabled>
                                     <i class="fas fa-exclamation-triangle me-2"></i>
@@ -412,7 +431,7 @@ class RealtimeClient {
                                 <i class="fas fa-download"></i>
                             </a>
                             <button type="button" class="btn btn-sm btn-danger mark-failed" data-file-id="${fileRow.getAttribute('data-file-id')}">
-                                <i class="fas fa-times-circle me-1"></i>Mark as Failed
+                                <i class="fas fa-times-circle me-1"></i>
                             </button>
                         </div>
                     `;
@@ -584,32 +603,35 @@ class RealtimeClient {
             </td>
             <td>${this.formatFileSize(data.file_size)}</td>            
             <td>
-                <span class="badge bg-warning">
+                <span class="status-badge status-pending">
                     <i class="fas fa-clock me-1"></i>
                     Pending
                 </span>
             </td>
             <td class="text-end">
                 <div style="display: flex; gap: 3px;">
-                    <button type="button" class="btn btn-sm btn-success verify-btn" 
-                            data-session-token="${data.session_token}"
-                            data-bs-toggle="tooltip"
-                            data-bs-title="Verify File">
-                        <i class="fas fa-check"></i>
-                    </button>
+                    <form class="d-inline verify-form" action="/verify_file/${data.session_token}" method="POST">
+                        <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
+                        <button type="submit" class="btn btn-sm btn-success verify-btn" 
+                                data-bs-toggle="tooltip"
+                                data-bs-title="Verify File">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </form>
                     <button type="button" class="btn btn-sm btn-primary download-btn"
-                            disabled
-                            data-session-token="${data.session_token}"
+                            data-session-token="{{ file.session_token }}"
                             data-bs-toggle="tooltip"
-                            data-bs-title="Download File">
+                            data-bs-title="Download File" disabled>
                         <i class="fas fa-download"></i>
-                    </button>                    
-                    <button type="button" class="btn btn-sm btn-danger mark-failed-btn"
-                            data-id="${data.id}"
-                            data-bs-toggle="tooltip"
-                            data-bs-title="Mark as Failed">
-                        <i class="fas fa-times-circle"></i>
-                    </button>
+                    </button>                                          
+                    <form class="d-inline mark-failed-form" action="/mark_file_failed/${data.id}" method="POST">
+                        <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
+                        <button type="submit" class="btn btn-sm btn-danger mark-failed-btn"
+                                data-bs-toggle="tooltip"
+                                data-bs-title="Mark as Failed">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                    </form>
                 </div>
             </td>
         `;
@@ -623,24 +645,97 @@ class RealtimeClient {
     }
 
     initializeFileRowButtons(row) {
-        const verifyBtn = row.querySelector('.verify-btn');
-        if (verifyBtn) {            
-            verifyBtn.addEventListener('click', () => {
-                const sessionToken = verifyBtn.dataset.sessionToken;
-                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-                fetch(`/verify_file/${sessionToken}`, {
+        var tooltipTriggerList = [].slice.call(row.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function(tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        const verificationModal = document.getElementById('verificationModal');
+        const verificationModalInstance = new bootstrap.Modal(verificationModal);
+        let currentVerifyForm = null;
+        let currentSessionToken = null;
+
+        function showModalContent(contentClass) {
+            ['verification-info', 'verification-loading', 'verification-success', 'verification-error'].forEach(cls => {
+                document.querySelector(`.${cls}`).classList.add('d-none');
+            });
+            document.querySelector(`.${contentClass}`).classList.remove('d-none');
+        }
+
+        row.querySelectorAll('.verify-form').forEach(form => {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                currentVerifyForm = form;
+                currentSessionToken = form.action.split('/').pop();
+                
+                try {
+                    const response = await fetch(`/file_metadata/${currentSessionToken}`);
+                    if (response.ok) {
+                        const metadata = await response.json();
+                        
+                        document.getElementById('modal-filename').textContent = metadata.filename;
+                        document.getElementById('modal-timestamp').textContent = new Date(metadata.timestamp).toLocaleString();
+                        document.getElementById('modal-iv').textContent = metadata.iv;
+                        document.getElementById('modal-file-hash').textContent = metadata.file_hash;
+                        document.getElementById('modal-signature').textContent = metadata.signature;
+                        document.getElementById('modal-sender-ip').textContent = metadata.sender_ip;
+                        document.getElementById('modal-sender-key').textContent = metadata.sender_key;
+                        showModalContent('verification-info');
+                        document.getElementById('proceedVerifyBtn').disabled = false;
+                        
+                        verificationModalInstance.show();
+                    } else {
+                        const error = await response.json();
+                        alert(error.error || 'Failed to fetch file metadata');
+                    }
+                } catch (error) {
+                    console.error('Error fetching metadata:', error);
+                    alert('Failed to fetch file metadata: ' + error.message);
+                }
+            });
+        });
+
+        document.getElementById('proceedVerifyBtn').addEventListener('click', async () => {
+            if (!currentVerifyForm) return;
+
+            const submitBtn = document.getElementById('proceedVerifyBtn');
+            const originalText = submitBtn.innerHTML;
+            
+            try {
+                showModalContent('verification-loading');
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verifying...';
+                submitBtn.disabled = true;
+                
+                const formData = new FormData(currentVerifyForm);
+                const csrfToken = currentVerifyForm.querySelector('input[name="csrf_token"]').value;
+                const response = await fetch(currentVerifyForm.action, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
                         'X-CSRFToken': csrfToken
-                    }
-                }).then(response => {
-                    if (response.ok) {
-                        location.reload();
-                    }
+                    },
+                    body: formData
                 });
-            });
-        }
+                
+                if (response.ok) {
+                    showModalContent('verification-success');                    
+                    setTimeout(() => {
+                        verificationModalInstance.hide();
+                        location.reload();
+                    }, 1500);
+                } else {
+                    const error = await response.json();
+                    document.getElementById('verification-error-message').textContent = error.error || 'Verification failed';
+                    showModalContent('verification-error');
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                document.getElementById('verification-error-message').textContent = 'Verification failed: ' + error.message;
+                showModalContent('verification-error');
+            } finally {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        });
 
         const downloadBtn = row.querySelector('.download-btn');
         if (downloadBtn) {
@@ -709,6 +804,90 @@ class RealtimeClient {
                     });
                 }
             });
+        }
+    }
+
+    initializeRequestButtons(requestElement) {
+        const approveBtn = requestElement.querySelector('.approve-request');
+        const rejectBtn = requestElement.querySelector('.reject-request');
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        if (approveBtn) {
+            approveBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch(`/host/request/${approveBtn.dataset.requestId}/approve`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        }
+                    });
+
+                    if (response.ok) {
+                        requestElement.remove();
+                        this.updatePendingCount(-1);
+                        showAlert('success', 'Request approved successfully');
+                    } else {
+                        showAlert('danger', 'Failed to approve request');
+                    }
+                } catch (error) {
+                    console.error('Error approving request:', error);
+                    showAlert('danger', 'Failed to approve request');
+                }
+            });
+        }
+
+        if (rejectBtn) {
+            rejectBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch(`/host/request/${rejectBtn.dataset.requestId}/reject`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        }
+                    });
+
+                    if (response.ok) {
+                        requestElement.remove();
+                        this.updatePendingCount(-1);
+                        showAlert('success', 'Request rejected successfully');
+                    } else {
+                        showAlert('danger', 'Failed to reject request');
+                    }
+                } catch (error) {
+                    console.error('Error rejecting request:', error);
+                    showAlert('danger', 'Failed to reject request');
+                }
+            });
+        }
+    }
+
+    updatePendingCount(change) {
+        const pendingCount = document.querySelector('.pending-count');
+        if (pendingCount) {
+            const currentCount = parseInt(pendingCount.textContent) || 0;
+            const newCount = Math.max(0, currentCount + change);
+            pendingCount.innerHTML = `
+                <i class="fas fa-clock me-1"></i>
+                ${newCount} Pending
+            `;
+
+            // If no requests left, show empty state
+            if (newCount === 0) {
+                const requestsList = document.querySelector('.join-requests');
+                if (requestsList) {
+                    requestsList.innerHTML = `
+                        <div class="text-center py-5">
+                            <div class="mb-3">
+                                <i class="fas fa-inbox fa-3x text-muted"></i>
+                            </div>
+                            <h5 class="text-muted">No Pending Requests</h5>
+                            <p class="text-muted mb-0">When users request to join your hosts, they will appear here.</p>
+                        </div>
+                    `;
+                }
+            }
         }
     }
 
@@ -856,6 +1035,188 @@ class RealtimeClient {
             'pending': 'clock'
         };
         return icons[status] || 'question-circle';
+    }
+
+    handleRequestApproved(data) {
+        // Find the host card for this request
+        console.log("Request approved data:", data);
+        const hostCard = document.querySelector(`[data-host-id="${data.host_id}"]`);
+        if (!hostCard) return;
+
+        // Update the status display
+        const statusArea = hostCard.querySelector('.status-area');
+        if (statusArea) {
+            statusArea.innerHTML = `
+                <div class="mb-2">
+                    <span class="badge bg-success d-block p-2 mb-2">
+                        <i class="fas fa-check-circle me-1"></i>
+                        Approved ${data.approved_at}
+                    </span>
+                    <form action="/select_host/${data.host_id}" method="POST" class="select-host-form">
+                        <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-upload me-2"></i>
+                            Select this Host
+                        </button>
+                    </form>
+                </div>
+            `;
+        }
+
+        showAlert('success', 'Your host join request has been approved!');
+    }
+
+    handleRequestRejected(data) {
+        // Find the host card
+        const hostCard = document.querySelector(`[data-host-id="${data.host_id}"]`);
+        if (!hostCard) return;
+
+        // Update status display
+        const statusArea = hostCard.querySelector('.status-area');
+        if (statusArea) {
+            statusArea.innerHTML = `
+                <div class="alert alert-danger mb-2">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="fas fa-times-circle text-danger me-2"></i>
+                        <strong>Request Rejected</strong>
+                    </div>
+                    <small class="d-block text-muted mb-2">
+                        Rejected: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}
+                    </small>
+                </div>
+                <form action="/host/${data.host_id}/request_join" method="POST" class="join-host-form">
+                    <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-redo me-1"></i>
+                        Request Again
+                    </button>
+                </form>
+            `;
+        }
+
+        // Show notification
+        showAlert('warning', 'Your host join request was rejected');
+    }
+
+    handleAccessRevoked(data) {
+        // Find the host card
+        const hostCard = document.querySelector(`[data-host-id="${data.host_id}"]`);
+        if (!hostCard) return;
+
+        // Update status display
+        const statusArea = hostCard.querySelector('.status-area');
+        if (statusArea) {
+            statusArea.innerHTML = `
+                <div class="alert alert-secondary mb-2">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="fas fa-ban text-secondary me-2"></i>
+                        <strong>Access Revoked</strong>
+                    </div>
+                    <small class="d-block text-muted mb-2">
+                        Revoked: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}
+                    </small>
+                </div>
+                <form action="/host/${data.host_id}/request_join" method="POST" class="join-host-form">
+                    <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-redo me-1"></i>
+                        Request Again
+                    </button>
+                </form>
+            `;
+        }
+
+        // Show notification
+        showAlert('info', 'Your access to this host has been revoked');
+    }    
+    
+    handleNewJoinRequest(data) {
+        console.log('New join request received:', data);
+        const cardBody = document.querySelector('.pending-requests.card-body');
+        if (!cardBody) return;
+
+        // Handle empty state
+        const noRequestsMessage = cardBody.querySelector('.text-center');
+        if (noRequestsMessage) {
+            noRequestsMessage.remove();
+        }
+
+        let requestsList = document.querySelector('.join-requests');
+        
+        // Create join-requests container if it doesn't exist
+        if (!requestsList) {
+            requestsList = document.createElement('div');
+            requestsList.className = 'list-group join-requests';
+            cardBody.appendChild(requestsList);
+        }
+
+        const newRequestHtml = `
+            <div class="list-group-item" data-request-id="${data.request_id}">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-user text-secondary"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <div>
+                                <span class="fw-medium">${data.sender_ip}</span>
+                                <small class="text-muted ms-2">${data.created_at}</small>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <form action="/host/request/${data.request_id}/approve" method="POST" class="approve-form">
+                                    <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
+                                    <input type="hidden" name="message" value="Really!">
+                                    <button type="submit" class="btn btn-sm btn-light text-success px-3" title="Approve">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </form>
+                                <form action="/host/request/${data.request_id}/reject" method="POST" class="reject-form">
+                                    <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
+                                    <button type="submit" class="btn btn-sm btn-light text-danger px-3" title="Reject">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="bg-light rounded px-3 py-2">
+                            <code>${data.message}</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        const noRequestsElements = cardBody.querySelector('.text-center');
+        
+        if (!requestsList) {
+            if (noRequestsElements) {
+                noRequestsElements.remove();
+            }
+            requestsList = document.createElement('div');
+            requestsList.className = 'row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4';
+            cardBody.appendChild(requestsList);
+        }
+
+        // Insert the new request at the top of the list
+        requestsList.insertAdjacentHTML('afterbegin', newRequestHtml);
+
+        // Update the pending count badge
+        const pendingCount = document.querySelector('.pending-count');
+        if (pendingCount) {
+            const currentCount = parseInt(pendingCount.textContent.match(/\d+/) || [0])[0];
+            pendingCount.innerHTML = `
+                <i class="fas fa-clock me-1"></i>
+                ${currentCount + 1} Pending
+            `;
+        }
+
+        // Initialize event listeners for the new request buttons
+        const newRequestElement = requestsList.querySelector(`[data-request-id="${data.request_id}"]`);
+        if (newRequestElement) {
+            this.initializeRequestButtons(newRequestElement);
+        }
+
+        // Show notification
+        showAlert('info', 'New join request received');
     }
 }
 

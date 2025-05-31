@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <!-- Page Header -->
+            <div class="page-header mb-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-1">Host Request Management</h2>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
+                            <i class="fas fa-sync-alt me-1"></i>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Host Join Requests -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center bg-white py-3">
+                    <div>
+                        <h4 class="mb-0">
+                            <i class="fas fa-user-plus me-2 text-primary"></i>
+                            Host Join Requests
+                        </h4>
+                        <p class="text-muted mb-0 small">Manage pending join requests from senders</p>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-primary pending-count rounded-pill">
+                            <i class="fas fa-clock me-1"></i>
+                            {{ pending_requests|length }} Pending
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="card-body">                    
+                    {% if pending_requests %}
+                    <div class="list-group join-requests gap-1">
+                        {% for request in pending_requests %}
+                        <div class="list-group-item" data-request-id="{{ request.id }}">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-user text-secondary"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <div>
+                                            <span class="fw-medium">{{ request.sender_ip }}</span>
+                                            <small class="text-muted ms-2">{{ request.created_at.strftime('%H:%M, %d/%m') }}</small>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <form action="{{ url_for('approve_join_request', request_id=request.id) }}" method="POST" class="approve-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="message" value="Really!">
+                                                <button type="submit" class="btn btn-sm btn-light text-success px-3" title="Approve">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            </form>
+                                            <form action="{{ url_for('reject_join_request', request_id=request.id) }}" method="POST" class="reject-form">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-sm btn-light text-danger px-3" title="Reject">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                    <div class="bg-light rounded px-3 py-2">
+                                        <code>{{ request.message }}</code>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3">
+                            <i class="fas fa-inbox fa-3x text-muted"></i>
+                        </div>
+                        <h5 class="text-muted">No Pending Requests</h5>
+                        <p class="text-muted mb-0">When users request to join your hosts, they will appear here.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Approved Hosts -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="mb-0">
+                                <i class="fas fa-check-circle me-2 text-success"></i>
+                                Approved Hosts
+                            </h4>
+                            <p class="text-muted mb-0 small">View and manage approved host connections</p>
+                        </div>
+                        {% if approved_hosts %}
+                        <span class="badge bg-success rounded-pill">
+                            <i class="fas fa-users me-1"></i>
+                            {{ approved_hosts|length }} Active
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-bodv pending-requests">
+                    {% if approved_hosts %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>IP Host</th>
+                                    <th>IP Address</th>
+                                    <th>Join Date</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for host in approved_hosts %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="me-3">
+                                                <div class="avatar-circle bg-primary bg-opacity-10 text-primary">
+                                                    <i class="fas fa-desktop"></i>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div class="fw-medium">{{ host.host_owner_ip }}</div>
+                                                <small class="text-muted">Host #{{ host.id }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><code>{{ host.sender_ip }}</code></td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-calendar-check me-2 text-success"></i>
+                                            {{ host.approved_at.strftime('%Y-%m-%d') }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            <i class="fas fa-circle me-1 small"></i>
+                                            Active
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form action="{{ url_for('revoke_host_access', host_id=host.id) }}" method="POST" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm" 
+                                                    onclick="return confirm('Are you sure you want to revoke access for this host?')">
+                                                <i class="fas fa-ban"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3">
+                            <i class="fas fa-users-slash fa-3x text-muted"></i>
+                        </div>
+                        <h5 class="text-muted">No Approved Hosts</h5>
+                        <p class="text-muted mb-0">Approved host connections will be listed here.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast container for notifications -->
+<div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .avatar-circle {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .request-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .message-container {
+        border-left: 3px solid var(--bs-warning);
+    }
+
+    .page-header {
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+        padding-bottom: 1rem;
+    }
+
+    .card {
+        border: none;
+        border-radius: 0.5rem;
+    }
+
+    .card-header {
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+    }
+
+    .table > :not(caption) > * > * {
+        padding: 1rem 0.75rem;
+    }
+
+    .badge {
+        font-weight: 500;
+    }
+
+    .btn-sm {
+        padding: 0.4rem 0.8rem;
+    }
+
+    .list-group-item {
+        transition: all 0.2s ease-in-out;
+    }
+
+    .list-group-item:hover {
+        transform: translateX(4px);
+    }
+
+    .input-group-text {
+        border: none;
+    }
+
+    .form-control[readonly] {
+        background-color: var(--bs-light);
+        border: none;
+    }
+</style>
+{% endblock %}

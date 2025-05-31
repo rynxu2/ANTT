@@ -5,7 +5,7 @@
     <div class="col-lg-10">
         <div class="row g-4">
             <!-- Host Management Card -->
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="card h-100 border-primary hover-shadow">
                     <div class="card-body text-center p-4">
                         <div class="display-4 mb-3 text-primary">
@@ -26,7 +26,7 @@
             </div>
 
             <!-- Received Files Card -->
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <div class="card h-100 border-success hover-shadow">
                     <div class="card-body text-center p-4">
                         <div class="display-4 mb-3 text-success">
@@ -40,6 +40,27 @@
                             <a href="{{ url_for('receiver_files') }}" class="btn btn-success btn-lg">
                                 <i class="fas fa-download me-2"></i>
                                 View Files
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Host Requests Card -->
+            <div class="col-md-4">
+                <div class="card h-100 border-warning hover-shadow">
+                    <div class="card-body text-center p-4">
+                        <div class="display-4 mb-3 text-warning">
+                            <i class="fas fa-user-plus"></i>
+                        </div>
+                        <h3 class="card-title mb-3">Host Requests</h3>
+                        <p class="card-text text-muted mb-4">
+                            Manage join requests from senders who want to use your hosts.
+                        </p>
+                        <div class="mt-auto">
+                            <a href="{{ url_for('receiver_host_approval') }}" class="btn btn-warning btn-lg">
+                                <i class="fas fa-tasks me-2"></i>
+                                Manage Requests
                             </a>
                         </div>
                     </div>

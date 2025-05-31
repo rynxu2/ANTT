@@ -115,3 +115,37 @@ def notify_status_change(session_data):
                 notify_action_end(client_ip, 'status-update', success=False, error_message=str(e))
             except:
                 pass
+
+def notify_new_join_request(request):
+    """Notify host owner about new join request"""
+    request_dict = {
+        'request_id': request.id,
+        'sender_ip': request.sender_ip,
+        'message': request.message,
+        'created_at': request.created_at.strftime('%Y-%m-%d %H:%M')
+    }
+    print(f"Emitting new_join_request for request ID {request.id} to host {request.host_owner_ip}")
+    socketio.emit('new_join_request', request_dict, room=request.host_owner_ip, namespace='/')
+
+def notify_request_approved(request):
+    """Notify sender that their request was approved"""
+    socketio.emit('request_approved', {
+        'request_id': request.id,
+        'host_id': request.host_id,
+        'response_message': request.response_message,
+        'approved_at': request.approved_at.strftime('%Y-%m-%d %H:%M') if request.approved_at else None
+    }, room=request.sender_ip, namespace='/')
+
+def notify_request_rejected(request):
+    """Notify sender that their request was rejected"""
+    socketio.emit('request_rejected', {
+        'request_id': request.id,
+        'host_id': request.host_id
+    }, room=request.sender_ip, namespace='/')
+
+def notify_access_revoked(request):
+    """Notify sender that their access was revoked"""
+    socketio.emit('access_revoked', {
+        'request_id': request.id,
+        'host_id': request.host_id
+    }, room=request.sender_ip, namespace='/')

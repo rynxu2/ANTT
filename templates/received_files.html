@@ -115,7 +115,6 @@
                                             </button>
                                         </form>
                                         {% endif %}
-                                        
                                         <button type="button" class="btn btn-sm btn-primary download-btn"
                                                 {% if file.status != 'verified' %}disabled{% endif %}
                                                 data-session-token="{{ file.session_token }}"
@@ -150,6 +149,94 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- Verification Details Modal -->
+        <div class="modal fade" id="verificationModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-shield-alt me-2"></i>
+                            File Verification Details
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="verification-info">
+                            <div class="mb-4">
+                                <h6>File Information</h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <p><strong>Filename:</strong><br>
+                                            <span id="modal-filename" class="text-muted"></span></p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>Upload Time:</strong><br>
+                                            <span id="modal-timestamp" class="text-muted"></span></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <h6>Cryptographic Information</h6>
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <p><strong>Initialization Vector (IV):</strong><br>
+                                            <code id="modal-iv" class="d-block mb-2 p-2 bg-light rounded"></code></p>
+                                    </div>
+                                    <div class="col-12">
+                                        <p><strong>File Hash (SHA-512):</strong><br>
+                                            <code id="modal-file-hash" class="d-block mb-2 p-2 bg-light rounded word-wrap"></code></p>
+                                    </div>
+                                    <div class="col-12">
+                                        <p><strong>Metadata Signature:</strong><br>
+                                            <code id="modal-signature" class="d-block mb-2 p-2 bg-light rounded word-wrap"></code></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <h6>Sender's Information</h6>
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <p><strong>IP Address:</strong><br>
+                                            <code id="modal-sender-ip" class="text-muted"></code></p>
+                                    </div>
+                                    <div class="col-12">
+                                        <p><strong>Public Key:</strong></p>
+                                        <details>
+                                            <summary class="text-primary" style="cursor: pointer">Show Public Key</summary>
+                                            <pre><code id="modal-sender-key" class="d-block mt-2 p-2 bg-light rounded small"></code></pre>
+                                        </details>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="verification-loading text-center d-none">
+                            <div class="spinner-border text-primary mb-3"></div>
+                            <p>Verifying file integrity and authenticity...</p>
+                        </div>
+                        <div class="verification-success text-center d-none">
+                            <i class="fas fa-check-circle text-success display-1 mb-3"></i>
+                            <h5 class="text-success">Verification Successful!</h5>
+                            <p>The file has been verified and is safe to download.</p>
+                        </div>
+                        <div class="verification-error text-center d-none">
+                            <i class="fas fa-times-circle text-danger display-1 mb-3"></i>
+                            <h5 class="text-danger">Verification Failed</h5>
+                            <p id="verification-error-message">An error occurred during verification.</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" id="proceedVerifyBtn" class="btn btn-success">
+                            <i class="fas fa-check me-2"></i>
+                            Proceed with Verification
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -161,40 +248,98 @@ document.addEventListener('DOMContentLoaded', function() {
     tooltipTriggerList.map(function(tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
+    
+    const verificationModal = document.getElementById('verificationModal');
+    const verificationModalInstance = new bootstrap.Modal(verificationModal);
+    let currentVerifyForm = null;
+    let currentSessionToken = null;
+
+    function showModalContent(contentClass) {
+        ['verification-info', 'verification-loading', 'verification-success', 'verification-error'].forEach(cls => {
+            document.querySelector(`.${cls}`).classList.add('d-none');
+        });
+        document.querySelector(`.${contentClass}`).classList.remove('d-none');
+    }
+
     document.querySelectorAll('.verify-form').forEach(form => {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const submitBtn = form.querySelector('button[type="submit"]');
-            const originalText = submitBtn.innerHTML;
+            currentVerifyForm = form;
+            currentSessionToken = form.action.split('/').pop();
             
+            // Fetch file metadata before showing modal
             try {
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                submitBtn.disabled = true;
-                
-                const formData = new FormData(form);
-                const csrfToken = form.querySelector('input[name="csrf_token"]').value;
-                const response = await fetch(form.action, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: formData
-                });
-                
+                const response = await fetch(`/file_metadata/${currentSessionToken}`);
                 if (response.ok) {
-                    location.reload();
+                    const metadata = await response.json();
+                    
+                    // Update modal with file information
+                    document.getElementById('modal-filename').textContent = metadata.filename;
+                    document.getElementById('modal-timestamp').textContent = new Date(metadata.timestamp).toLocaleString();
+                    document.getElementById('modal-iv').textContent = metadata.iv;
+                    document.getElementById('modal-file-hash').textContent = metadata.file_hash;
+                    document.getElementById('modal-signature').textContent = metadata.signature;
+                    document.getElementById('modal-sender-ip').textContent = metadata.sender_ip;
+                    document.getElementById('modal-sender-key').textContent = metadata.sender_key;
+                      // Show verification info
+                    showModalContent('verification-info');
+                    document.getElementById('proceedVerifyBtn').disabled = false;
+                    
+                    verificationModalInstance.show();
                 } else {
                     const error = await response.json();
-                    alert(error.error || 'Verification failed');
+                    alert(error.error || 'Failed to fetch file metadata');
                 }
             } catch (error) {
-                console.error('Verification error:', error);
-                alert('Verification failed: ' + error.message);
-            } finally {
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
+                console.error('Error fetching metadata:', error);
+                alert('Failed to fetch file metadata: ' + error.message);
             }
         });
+    });
+
+    // Handle the verification process when user clicks "Proceed with Verification"
+    document.getElementById('proceedVerifyBtn').addEventListener('click', async () => {
+        if (!currentVerifyForm) return;
+
+        const submitBtn = document.getElementById('proceedVerifyBtn');
+        const originalText = submitBtn.innerHTML;
+        
+        try {
+            // Show loading state
+            showModalContent('verification-loading');
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verifying...';
+            submitBtn.disabled = true;
+            
+            const formData = new FormData(currentVerifyForm);
+            const csrfToken = currentVerifyForm.querySelector('input[name="csrf_token"]').value;
+            const response = await fetch(currentVerifyForm.action, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData
+            });
+            
+            if (response.ok) {
+                // Show success state
+                showModalContent('verification-success');                    setTimeout(() => {
+                    verificationModalInstance.hide();
+                    location.reload();
+                }, 1500);
+            } else {
+                const error = await response.json();
+                // Show error state
+                document.getElementById('verification-error-message').textContent = error.error || 'Verification failed';
+                showModalContent('verification-error');
+            }
+        } catch (error) {
+            console.error('Verification error:', error);
+            document.getElementById('verification-error-message').textContent = 'Verification failed: ' + error.message;
+            showModalContent('verification-error');
+        } finally {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
     });
   
     document.querySelectorAll('.download-btn').forEach(btn => {

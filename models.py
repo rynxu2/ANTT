@@ -59,3 +59,20 @@ class Host(db.Model):
     
     def __repr__(self):
         return f'<Host {self.name} ({self.ip_address})>'
+
+class HostJoinRequest(db.Model):
+    """Model for host join requests"""
+    id = db.Column(db.Integer, primary_key=True)
+    host_id = db.Column(db.Integer, db.ForeignKey('host.id'), nullable=False)
+    sender_ip = db.Column(db.String(45), nullable=False)
+    host_owner_ip = db.Column(db.String(45), nullable=False)
+    message = db.Column(db.String(255))
+    response_message = db.Column(db.String(255))
+    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected, revoked
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    approved_at = db.Column(db.DateTime)
+    rejected_at = db.Column(db.DateTime)
+    revoked_at = db.Column(db.DateTime)
+
+    # Relationships
+    host = db.relationship('Host', backref=db.backref('join_requests', lazy=True))

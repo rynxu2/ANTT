@@ -139,11 +139,20 @@
                         <h5><i class="fas fa-check-circle me-2"></i>File Transfer Complete!</h5>
                         <p class="mb-2">Your file has been securely encrypted and uploaded.</p>
                         <hr>
-                        <div class="row">
+                        <div class="row">                            
                             <div class="col-md-6">
-                                <h6>Session Information</h6>
-                                <p><strong>Session Token:</strong><br><code id="sessionToken"></code></p>
-                                <p><strong>File Hash (SHA-512):</strong><br><code id="fileHash"></code></p>
+                                <h6>Security Information</h6>
+                                <p><strong>Session Token:</strong><br>
+                                    <code id="sessionToken" class="d-block mb-2"></code></p>
+                                <p><strong>File Hash (SHA-512):</strong><br>
+                                    <code id="fileHash" class="d-block mb-2"></code></p>
+                                <p><strong>Initialization Vector (IV):</strong><br>
+                                    <code id="iv" class="d-block mb-2"></code></p>
+                                <details class="mb-3">
+                                    <summary><strong>Public Key (Used for Encryption)</strong></summary>
+                                    <pre><code id="publicKey" class="d-block mt-2 small" style="white-space: pre-wrap;"></code></pre>
+                                </details>
+                                <p><small class="text-muted">Hash Algorithm: <span id="hashType"></span></small></p>
                             </div>
                             <div class="col-md-6">
                                 <h6>Next Steps</h6>
@@ -192,61 +201,7 @@
             if (e.target.files.length > 0) {
                 updateFileInfo(e.target.files[0]);
             }
-        });
-
-        const uploadForm = document.getElementById('uploadForm');
-        uploadForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const formData = new FormData();
-            const file = fileInput.files[0];
-            if (!file) {
-                showAlert('warning', 'Please select a file first.');
-                return;
-            }
-            
-            formData.append('file', file);
-            
-            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-            
-            uploadBtn.disabled = true;
-            const originalBtnText = uploadBtn.innerHTML;
-            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
-            
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrfToken
-                    },
-                    body: formData
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    uploadForm.classList.add('d-none');
-                    
-                    document.getElementById('sessionToken').textContent = result.session_token;
-                    document.getElementById('fileHash').textContent = result.file_hash;
-                    successInfo.classList.remove('d-none');
-                    
-                    showAlert('success', 'File uploaded successfully!');
-                } else {
-                    if (result.status === 'pending') {
-                        showAlert('warning', 'You already have a pending file transfer. Please wait for verification or mark it as failed before uploading a new file.');
-                    } else {
-                        showAlert('danger', result.error || 'Upload failed');
-                    }
-                }
-            } catch (error) {
-                console.error('Upload error:', error);
-                showAlert('danger', 'Upload failed: ' + error.message);
-            } finally {
-                uploadBtn.disabled = false;
-                uploadBtn.innerHTML = originalBtnText;
-            }
-        });
+        });        
         
         function updateFileInfo(file) {
             document.getElementById('fileName').textContent = file.name;

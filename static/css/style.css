@@ -667,15 +667,212 @@ tr:hover .status-pending {
     color: hsla(var(--primary-color) / 1);
 }
 
-/* Toast Notifications */
-.toast {
-    background: #fff;
-    border: 1px solid rgba(0,0,0,0.1);
-    box-shadow: var(--shadow-lg);
+/* Host Join Request Styles */
+.join-host-actions {
+    background-color: rgba(var(--bs-primary-rgb), 0.05);
+    border-radius: 0.5rem;
+    padding: 1rem;
 }
 
-/* Tooltips */
-.tooltip {
-    --bs-tooltip-bg: hsla(var(--text-primary) / 0.9);
-    --bs-tooltip-color: #fff;
+.join-host-form .form-control {
+    background-color: rgba(255, 255, 255, 0.9);
+}
+
+.join-requests .list-group-item {
+    transition: all 0.2s ease-in-out;
+    border-left: 4px solid transparent;
+}
+
+.join-requests .list-group-item:hover {
+    border-left-color: var(--bs-primary);
+    background-color: rgba(var(--bs-primary-rgb), 0.05);
+}
+
+.message-text {
+    font-family: monospace;
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+}
+
+.request-info {
+    max-width: 70%;
+}
+
+/* Status badges */
+.badge.bg-warning {
+    color: #000;
+}
+
+/* Table styles */
+.table > :not(caption) > * > * {
+    padding: 1rem 0.75rem;
+}
+
+.table tbody tr {
+    transition: all 0.2s ease-in-out;
+}
+
+.table tbody tr:hover {
+    background-color: rgba(var(--bs-primary-rgb), 0.05);
+}
+
+/* Toast notifications */
+.toast {
+    min-width: 250px;
+}
+
+.toast.bg-success {
+    border-left: 4px solid #198754;
+}
+
+.toast.bg-danger {
+    border-left: 4px solid #dc3545;
+}
+
+.toast.bg-warning {
+    border-left: 4px solid #ffc107;
+}
+
+.toast.bg-info {
+    border-left: 4px solid #0dcaf0;
+}
+
+.word-wrap {
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+.verification-info code {
+    font-size: 0.85rem;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.verification-loading,
+.verification-success,
+.verification-error {
+    padding: 2rem 0;
+}
+
+.verification-success i,
+.verification-error i {
+    font-size: 4rem;
+}
+
+.modal-body {
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+details summary::-webkit-details-marker {
+    display: none;
+}
+
+details summary {
+    list-style: none;
+}
+
+details summary::before {
+    content: '▶';
+    display: inline-block;
+    margin-right: 0.5rem;
+    transition: transform 0.2s;
+}
+
+details[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.connection-status {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1000;
+    font-size: 14px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.connection-status.connected .status-dot {
+    background-color: #4caf50;
+}
+
+.connection-status.disconnected .status-dot {
+    background-color: #f44336;
+}
+
+.connection-status.error .status-dot {
+    background-color: #ff9800;
+}
+
+.connection-status.reconnecting .status-dot {
+    background-color: #2196f3;
+    animation: blink 1s infinite;
+}
+
+.loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-left: 8px;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.status-badge.pending {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.processing {
+    background-color: #cce5ff;
+    color: #004085;
+}
+
+.status-badge.completed {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-badge.error {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+[data-action].loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
 }

@@ -8,8 +8,8 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 import secrets
 
-def generate_rsa_keypair(key_size=1024):
-    """Generate RSA key pair and return PEM encoded strings (1024 bits for better security)"""
+def generate_rsa_keypair(key_size=2048):
+    """Generate RSA key pair and return PEM encoded strings (2048 bits for better security)"""
     private_key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=key_size,
@@ -177,3 +177,13 @@ def hash_file(file_data):
 def hash_data_with_salt(data, salt):
     """Generate SHA-512 hash with salt"""
     return hashlib.sha512(salt + data).hexdigest()
+
+def hash_file_with_iv(iv, ciphertext):
+    """Calculate SHA-512 hash of IV concatenated with ciphertext"""
+    combined_data = iv + ciphertext
+    return hashlib.sha512(combined_data).hexdigest()
+
+def verify_file_hash(iv, ciphertext, expected_hash):
+    """Verify the SHA-512 hash of IV concatenated with ciphertext"""
+    calculated_hash = hash_file_with_iv(iv, ciphertext)
+    return secrets.compare_digest(calculated_hash, expected_hash)

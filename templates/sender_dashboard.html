@@ -10,7 +10,7 @@
                 <p class="text-muted mb-0">Monitor and manage your file transfers</p>
             </div>
             <div class="col-auto">
-                <a href="{{ url_for('sender_select_host') }}" class="btn btn-primary">
+                <a href="{{ url_for('sender_key_management') }}" class="btn btn-primary">
                     <i class="fas fa-upload me-2"></i>
                     New Transfer
                 </a>
@@ -167,7 +167,7 @@
                 </div>
                 <h5 class="empty-state-title">No Recent Transfers</h5>
                 <p class="empty-state-subtitle mb-3">Start by uploading a file to a registered host</p>
-                <a href="{{ url_for('sender_select_host') }}" class="btn btn-primary">
+                <a href="{{ url_for('sender_key_management') }}" class="btn btn-primary">
                     <i class="fas fa-upload me-2"></i>
                     Upload File
                 </a>

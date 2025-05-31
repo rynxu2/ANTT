@@ -93,6 +93,9 @@ class SecureUploadClient {
                 
                 document.getElementById('sessionToken').textContent = result.session_token;
                 document.getElementById('fileHash').textContent = result.file_hash;
+                document.getElementById('iv').textContent = result.metadata.iv;
+                document.getElementById('publicKey').textContent = result.metadata.public_key;
+                document.getElementById('hashType').textContent = result.metadata.hash_type;
                 
                 const uploadStep = document.querySelector('.step.active');
                 const verificationStep = document.querySelector('.step:last-child');

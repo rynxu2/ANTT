@@ -8,6 +8,11 @@ if __name__ == "__main__":
         print("Creating tables with new schema...")
         db.create_all()
         print("Database schema updated successfully")
-        
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
- 
+    
+    socketio.run(
+        app,
+        host="0.0.0.0",
+        port=5000,
+        debug=True,
+        use_reloader=False
+    )
