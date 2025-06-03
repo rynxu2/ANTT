@@ -569,29 +569,22 @@ def download_file(session_token):
             key_mapping.private_key_pem
         )
         
-        # Read the encrypted file which contains iv + ciphertext
         with open(upload_session.filepath, 'rb') as f:
             file_contents = f.read()
             
-        # Extract IV (first 16 bytes) and ciphertext
         stored_iv = file_contents[:16]
         encrypted_data = file_contents[16:]
         
-        # Verify the IV matches the one in metadata
         if stored_iv != iv:
             app.logger.error("IV mismatch between stored file and metadata")
             return jsonify({'error': 'IV verification failed'}), 400
             
-        # Verify hash one final time before decryption
         if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
             app.logger.error("File integrity check failed during download")
             return jsonify({'error': 'File integrity check failed'}), 400
             
         decrypted_data = decrypt_file_aes(encrypted_data, session_key, stored_iv)
         
-        if hashlib.sha512(decrypted_data).hexdigest() != upload_session.file_hash:
-            return jsonify({'error': 'File integrity check failed'}), 400
-            
         try:
             file_stream = io.BytesIO(decrypted_data)
             

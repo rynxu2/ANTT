@@ -267,13 +267,11 @@ document.addEventListener('DOMContentLoaded', function() {
             currentVerifyForm = form;
             currentSessionToken = form.action.split('/').pop();
             
-            // Fetch file metadata before showing modal
             try {
                 const response = await fetch(`/file_metadata/${currentSessionToken}`);
                 if (response.ok) {
                     const metadata = await response.json();
                     
-                    // Update modal with file information
                     document.getElementById('modal-filename').textContent = metadata.filename;
                     document.getElementById('modal-timestamp').textContent = new Date(metadata.timestamp).toLocaleString();
                     document.getElementById('modal-iv').textContent = metadata.iv;
@@ -281,7 +279,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('modal-signature').textContent = metadata.signature;
                     document.getElementById('modal-sender-ip').textContent = metadata.sender_ip;
                     document.getElementById('modal-sender-key').textContent = metadata.sender_key;
-                      // Show verification info
                     showModalContent('verification-info');
                     document.getElementById('proceedVerifyBtn').disabled = false;
                     
@@ -297,7 +294,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Handle the verification process when user clicks "Proceed with Verification"
     document.getElementById('proceedVerifyBtn').addEventListener('click', async () => {
         if (!currentVerifyForm) return;
 
@@ -305,7 +301,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const originalText = submitBtn.innerHTML;
         
         try {
-            // Show loading state
             showModalContent('verification-loading');
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verifying...';
             submitBtn.disabled = true;
@@ -321,14 +316,13 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             if (response.ok) {
-                // Show success state
-                showModalContent('verification-success');                    setTimeout(() => {
+                showModalContent('verification-success');                    
+                setTimeout(() => {
                     verificationModalInstance.hide();
                     location.reload();
                 }, 1500);
             } else {
                 const error = await response.json();
-                // Show error state
                 document.getElementById('verification-error-message').textContent = error.error || 'Verification failed';
                 showModalContent('verification-error');
             }
