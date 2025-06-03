@@ -34,7 +34,8 @@ from events import (
     notify_new_join_request, 
     notify_request_approved, 
     notify_request_rejected, 
-    notify_access_revoked
+    notify_access_revoked,
+    emit_status_change
 )
 import io
 import ipaddress
@@ -815,7 +816,6 @@ def mark_file_failed(file_id):
     file.update_status('failed')
     db.session.commit()
     
-    from event_manager import emit_status_change
     emit_status_change(file)
     
     return jsonify({

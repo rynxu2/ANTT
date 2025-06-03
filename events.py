@@ -116,6 +116,21 @@ def notify_status_change(session_data):
             except:
                 pass
 
+def emit_status_change(file):
+    """
+    Emit a status change event to both sender and receiver via Socket.IO
+    """
+    data = {
+        'file_id': file.id,
+        'session_token': file.session_token,
+        'status': file.status,
+        'filename': file.filename,
+        'timestamp': datetime.utcnow().isoformat(),
+    }
+    
+    socketio.emit('status_change', data, room=file.sender_ip)
+    socketio.emit('status_change', data, room=file.receiver_ip)
+    
 def notify_new_join_request(request):
     """Notify host owner about new join request"""
     request_dict = {
