@@ -56,14 +56,6 @@ class SecureUploadClient {
     async handleFileUpload(event) {
         event.preventDefault();
         
-        const fileInput = document.getElementById('fileInput');
-        const file = fileInput.files[0];
-        
-        if (!file) {
-            this.showAlert('warning', 'Please select a file to upload');
-            return;
-        }
-        
         const uploadBtn = document.querySelector('#uploadBtn');
         const originalText = uploadBtn.innerHTML;
         
@@ -72,50 +64,64 @@ class SecureUploadClient {
         try {
             uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
             uploadBtn.disabled = true;
-            
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-            
-            const response = await fetch('/upload', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken
-                },
-                body: formData
-            });
-            
-            const result = await response.json();
-            
-            if (response.ok) {
-                this.showAlert('success', 'File uploaded successfully! Redirecting to verification...');
+
+            const fileSource = document.querySelector('input[name="fileSource"]:checked').value;
+
+            if (fileSource === 'local' && !this.hasKeys) {
+                const fileInput = document.getElementById('fileInput');
+                const file = fileInput.files[0];
                 
-                document.getElementById('sessionToken').textContent = result.session_token;
-                document.getElementById('fileHash').textContent = result.file_hash;
-                document.getElementById('iv').textContent = result.metadata.iv;
-                document.getElementById('publicKey').textContent = result.metadata.public_key;
-                document.getElementById('hashType').textContent = result.metadata.hash_type;
-                
-                const uploadStep = document.querySelector('.step.active');
-                const verificationStep = document.querySelector('.step:last-child');
-                
-                uploadStep.classList.remove('active');
-                uploadStep.classList.add('completed');
-                verificationStep.classList.add('active');
-                
-                document.getElementById('uploadForm').style.display = 'none';
-                document.getElementById('successInfo').classList.remove('d-none');
-                document.querySelector('#headerbar .col:last-child .step').classList.add('completed');
-                
-                fileInput.value = '';
-            } else {
-                if (result.error && result.error.includes('pending file')) {
-                    this.showAlert('warning', result.error + ' You can go to your dashboard to manage existing files.');
-                } else {
-                    this.showAlert('danger', result.error || 'Upload failed');
+                if (!file) {
+                    this.showAlert('warning', 'Please select a file to upload');
+                    return;
                 }
+
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                
+                const response = await fetch('/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    this.showAlert('success', 'File uploaded successfully! Redirecting to verification...');
+                    
+                    document.getElementById('sessionToken').textContent = result.session_token;
+                    document.getElementById('fileHash').textContent = result.file_hash;
+                    document.getElementById('iv').textContent = result.metadata.iv;
+                    document.getElementById('publicKey').textContent = result.metadata.public_key;
+                    document.getElementById('hashType').textContent = result.metadata.hash_type;
+                    
+                    const uploadStep = document.querySelector('.step.active');
+                    const verificationStep = document.querySelector('.step:last-child');
+                    
+                    uploadStep.classList.remove('active');
+                    uploadStep.classList.add('completed');
+                    verificationStep.classList.add('active');
+                    
+                    document.getElementById('uploadForm').style.display = 'none';
+                    document.getElementById('successInfo').classList.remove('d-none');
+                    document.querySelector('#headerbar .col:last-child .step').classList.add('completed');
+                    
+                    fileInput.value = '';
+                } else {
+                    if (result.error && result.error.includes('pending file')) {
+                        this.showAlert('warning', result.error + ' You can go to your dashboard to manage existing files.');
+                    } else {
+                        this.showAlert('danger', result.error || 'Upload failed');
+                    }
+                }
+
             }
+            
         } catch (error) {
             console.error('Upload error:', error);
             this.showAlert('danger', 'Upload failed: ' + error.message);

@@ -619,11 +619,17 @@ class RealtimeClient {
                         </button>
                     </form>
                     <button type="button" class="btn btn-sm btn-primary download-btn"
-                            data-session-token="{{ file.session_token }}"
+                            data-session-token="${data.session_token}"
                             data-bs-toggle="tooltip"
                             data-bs-title="Download File" disabled>
                         <i class="fas fa-download"></i>
-                    </button>                                          
+                    </button>  
+                    <button type="button" class="btn btn-sm btn-primary drive-upload-btn"
+                            data-file-id="${data.id}"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Upload to Drive" disabled>
+                        <i class="fas fa-google-drive"></i>
+                    </button>    
                     <form class="d-inline mark-failed-form" action="/mark_file_failed/${data.id}" method="POST">
                         <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
                         <button type="submit" class="btn btn-sm btn-danger mark-failed-btn"
@@ -806,11 +812,10 @@ class RealtimeClient {
             });
         }
 
-        // Handle Drive upload
         const driveBtn = row.querySelector('.drive-upload-btn');
         if (driveBtn) {
             driveBtn.addEventListener('click', async () => {
-                const fileId = driveBtn.dataset.fileId;
+                const fileId = driveBtn.dataset.Id;
                 try {
                     driveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                     driveBtn.disabled = true;

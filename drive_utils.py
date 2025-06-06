@@ -29,7 +29,7 @@ class DriveManager:
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     'client_secret_326222266772-gj08e0ofpf0ulk5lkjibn5vgto6bvtfo.apps.googleusercontent.com.json', SCOPES)
-                self.credentials = flow.run_local_server(port=0)
+                self.credentials = flow.run_local_server(port=8080)
 
             with open('token.pickle', 'wb') as token:
                 pickle.dump(self.credentials, token)

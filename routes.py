@@ -24,7 +24,8 @@ from storage_utils import (
     store_temp_file,
     move_temp_to_permanent,
     cleanup_temp_files,
-    UPLOAD_FOLDER
+    UPLOAD_FOLDER,
+    TEMP_FOLDER
 )
 from events import (
     notify_new_host, 
@@ -368,6 +369,10 @@ def upload_file():
         return jsonify({'error': 'No file part'}), 400
 
     file = request.files['file']
+    file_drive_id = request.form.get('file_drive_id')
+    file_drive_link = request.form.get('file_drive_link')
+    file_source_type = request.form.get('file_source_type')
+    
     if file.filename == '':
         app.logger.error("Uploaded file has empty filename")
         return jsonify({'error': 'No selected file'}), 400
@@ -396,7 +401,7 @@ def upload_file():
     except Exception as e:
         app.logger.error(f"Database error while querying UploadSession: {str(e)}")
         return jsonify({'error': 'Server error querying uploads'}), 500
-    print(11)
+
     if existing_file:
         if existing_file.status not in [FILE_STATUS['VERIFIED'], FILE_STATUS['FAILED']]:
             app.logger.warning(f"Duplicate upload attempt by {sender_ip} to host {host.ip_address}")
@@ -476,6 +481,9 @@ def upload_file():
             file_hash=secured_hash,
             file_size=len(file_data),
             filepath=encrypted_path,
+            drive_file_id=file_drive_id,
+            drive_link=file_drive_link,
+            source_type=file_source_type,
             status=FILE_STATUS['PENDING']
         )
 
@@ -1032,34 +1040,99 @@ def get_file_metadata(session_token):
 
 @app.route('/drive/upload', methods=['POST'])
 def upload_to_drive():
-    """Upload a file from secure storage to Google Drive"""
-    if 'file_id' not in request.form:
-        return jsonify({'error': 'No file specified'}), 400
-    
-    file_id = request.form['file_id']
-    upload_session = UploadSession.query.filter_by(id=file_id).first()
-    
-    if not upload_session:
-        return jsonify({'error': 'File not found'}), 404
-        
+    """Upload a decrypted file from secure storage to Google Drive"""
     try:
-        # Upload file to Drive
-        drive_result = drive_manager.upload_file(upload_session.filepath)
-        if not drive_result:
-            return jsonify({'error': 'Failed to upload to Drive'}), 500
+        if 'file_id' not in request.form:
+            return jsonify({'error': 'No file specified'}), 400
+        
+        file_id = request.form['file_id']
+        upload_session = UploadSession.query.filter_by(id=file_id).first()
+        
+        if not upload_session:
+            return jsonify({'error': 'File not found'}), 404
+        
+        if upload_session.status != FILE_STATUS['VERIFIED']:
+            return jsonify({'error': 'File must be verified before uploading to Drive'}), 400
+        
+        client_ip = get_client_ip()
+        key_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
+        if not key_mapping:
+            return jsonify({'error': 'Recipient keys not found'}), 404
+        
+        metadata = upload_session.get_metadata()
+        iv = base64.b64decode(metadata['iv'])
+        encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])
+        
+        session_key = decrypt_with_private_key(
+            encrypted_session_key,
+            key_mapping.private_key_pem
+        )
+        
+        with open(upload_session.filepath, 'rb') as f:
+            file_contents = f.read()
             
-        # Update database with Drive information
-        upload_session.drive_file_id = drive_result['file_id']
-        upload_session.drive_link = drive_result['web_link']
-        upload_session.source_type = 'drive'
-        db.session.commit()
+        stored_iv = file_contents[:16]
+        encrypted_data = file_contents[16:]
         
-        return jsonify({
-            'success': True,
-            'drive_link': drive_result['web_link']
-        })
+        if stored_iv != iv:
+            app.logger.error("IV mismatch between stored file and metadata")
+            return jsonify({'error': 'IV verification failed'}), 400
+            
+        if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
+            app.logger.error("File integrity check failed during drive upload")
+            return jsonify({'error': 'File integrity check failed'}), 400
+            
+        decrypted_data = decrypt_file_aes(encrypted_data, session_key, stored_iv)
         
+        try:
+            temp_decrypted_path = os.path.join(TEMP_FOLDER, f"drive_upload_{os.path.basename(upload_session.filepath)}")
+            os.makedirs(os.path.dirname(temp_decrypted_path), exist_ok=True)
+            
+            with open(temp_decrypted_path, 'wb') as f:
+                f.write(decrypted_data)
+            
+            app.logger.info(f"Decrypted file created at: {temp_decrypted_path}")
+            
+            drive_result = drive_manager.upload_file(temp_decrypted_path)
+            if not drive_result:
+                raise Exception('Failed to upload to Drive')
+
+            upload_session.drive_file_id = drive_result['file_id']
+            upload_session.drive_link = drive_result['web_link']
+            upload_session.source_type = 'drive'
+            db.session.commit()
+            
+            app.logger.info(f"File uploaded to Drive: {upload_session.filename}")
+            
+            try:
+                notify_status_change(upload_session)
+                app.logger.info(f"Drive upload status notification sent for session: {upload_session.id}")
+            except Exception as notify_error:
+                app.logger.error(f"Error sending drive upload notification: {str(notify_error)}")
+                
+            os.remove(temp_decrypted_path)
+            app.logger.info("Temporary decrypted file removed")
+            
+            return jsonify({
+                'success': True,
+                'drive_link': drive_result['web_link'],
+                'filename': upload_session.filename
+            })
+            
+        except Exception as e:
+            db.session.rollback()
+            raise
+        
+        finally:
+            try:
+                if os.path.exists(temp_decrypted_path):
+                    os.remove(temp_decrypted_path)
+                    app.logger.info("Temporary decrypted file removed")
+            except Exception as cleanup_error:
+                app.logger.warning(f"Failed to remove temporary decrypted file: {cleanup_error}")
+                    
     except Exception as e:
+        app.logger.error(f"Drive upload error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/drive/download/<file_id>', methods=['GET'])
@@ -1119,7 +1192,7 @@ def pick_drive_file():
         session['selected_drive_file'] = {
             'id': file['id'],
             'name': file['name'],
-            'size': file.get('size'),  # May be None for Google Docs
+            'size': file.get('size'),
             'link': file['webViewLink']
         }
         
@@ -1133,3 +1206,8 @@ def pick_drive_file():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/oauth2callback')
+def oauth2callback():
+    """Handle Google OAuth2 callback"""
+    return render_template('oauth2callback.html')

@@ -212,7 +212,22 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Google Drive API -->
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client"></script>
+
 <script>
+    // Google Drive API configuration
+    const API_KEY = 'AIzaSyA8-XvmuuvFtm1U94xj6TDz0FxW6nXUVj4';
+    const CLIENT_ID = '326222266772-gj08e0ofpf0ulk5lkjibn5vgto6bvtfo.apps.googleusercontent.com';
+    const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
+    const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+
+    let accessToken = null;
+    let pickerInited = false;
+    let tokenClient;
+    let selectedFile = null;
+
     document.addEventListener('DOMContentLoaded', function() {
         const dropZone = document.querySelector('.upload-zone');
         const fileInput = document.getElementById('fileInput');
@@ -233,12 +248,12 @@
                 if (e.target.value === 'local') {
                     localUploadZone.classList.remove('d-none');
                     driveUploadZone.classList.add('d-none');
-                    fileInput.value = ''; // Clear file input
+                    fileInput.value = '';
                     fileInfo.classList.add('d-none');
                 } else {
                     localUploadZone.classList.add('d-none');
                     driveUploadZone.classList.remove('d-none');
-                    fileInput.value = ''; // Clear file input
+                    fileInput.value = '';
                     fileInfo.classList.add('d-none');
                 }
             });
@@ -265,13 +280,6 @@
             }
         });        
         
-        function updateFileInfo(file) {
-            document.getElementById('fileName').textContent = file.name;
-            document.getElementById('fileSize').textContent = formatFileSize(file.size);
-            document.getElementById('fileType').textContent = file.type || 'Unknown';
-            fileInfo.classList.remove('d-none');
-            uploadBtn.disabled = false;
-        }
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 Bytes';
             const k = 1024;
@@ -279,30 +287,195 @@
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
+        function updateFileInfo(file) {
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatFileSize(file.size);
+            document.getElementById('fileType').textContent = file.type || 'Unknown';
+            fileInfo.classList.remove('d-none');
+            uploadBtn.disabled = false;
+        }
 
-        // Google Drive integration
-        document.getElementById('pickFromDrive').addEventListener('click', function() {
-            // Open Google Drive file picker
-            openDrivePicker();
-        });
-        
         document.getElementById('clearDriveSelection').addEventListener('click', function() {
             selectedDriveFile.classList.add('d-none');
             driveFileName.textContent = '';
             uploadBtn.disabled = true;
         });
+        
+        document.getElementById('pickFromDrive').addEventListener('click', function() {
+            openDrivePicker();
+        });
+
+        function initializeGoogleDrive() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                redirect_uri: window.location.origin + '/oauth2callback',
+                callback: (tokenResponse) => {
+                    if (tokenResponse && tokenResponse.access_token) {
+                        accessToken = tokenResponse.access_token;
+                        loadPicker(tokenResponse.access_token);
+                    }
+                },
+            });
+            gapi.load('picker', () => {
+                pickerInited = true;
+            });
+        }
 
         function openDrivePicker() {
-            // Placeholder for Google Drive picker integration
-            // You need to implement the Google Drive API integration here
-            // On file select, update the driveFileName and enable the upload button
-            
-            // For demonstration, we'll just simulate file selection
-            setTimeout(() => {
-                driveFileName.textContent = 'SampleFile.txt';
+            if (!pickerInited) {
+                showAlert('warning', 'Google Drive API is still loading. Please try again in a moment.');
+                return;
+            }
+
+            if (!tokenClient) {
+                showAlert('error', 'Authentication client not initialized');
+                return;
+            }
+
+            tokenClient.requestAccessToken();
+        }
+
+        function loadPicker(accessToken) {
+            const view = new google.picker.View(google.picker.ViewId.DOCS);
+            view.setMimeTypes("application/pdf,image/png,image/jpeg,image/jpg,text/plain");
+
+            const picker = new google.picker.PickerBuilder()
+                .enableFeature(google.picker.Feature.NAV_HIDDEN)
+                .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+                .setAppId(CLIENT_ID)
+                .setOAuthToken(accessToken)
+                .addView(view)
+                .setDeveloperKey(API_KEY)
+                .setCallback(pickerCallback)
+                .build();
+
+            picker.setVisible(true);
+        }
+
+        function pickerCallback(data) {
+            if (data[google.picker.Response.ACTION] == google.picker.Action.PICKED) {
+                const doc = data[google.picker.Response.DOCUMENTS][0];
+                selectedFile = {
+                    id: doc[google.picker.Document.ID],
+                    name: doc[google.picker.Document.NAME],
+                    type: doc[google.picker.Document.MIME_TYPE],
+                    size: doc[google.picker.Document.SIZE],
+                    url: doc[google.picker.Document.URL]
+                };
+
+                driveFileName.textContent = selectedFile.name;
                 selectedDriveFile.classList.remove('d-none');
                 uploadBtn.disabled = false;
-            }, 1000);
+
+                document.getElementById('fileName').textContent = selectedFile.name;
+                document.getElementById('fileSize').textContent = formatFileSize(selectedFile.size);
+                document.getElementById('fileType').textContent = selectedFile.type;
+                document.getElementById('fileDetails').classList.remove('d-none');
+            }
+        }
+
+        document.getElementById('driveFile').addEventListener('change', function(e) {
+            if (e.target.checked && !pickerInited) {
+                initializeGoogleDrive();
+            }
+        });
+
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fileSource = document.querySelector('input[name="fileSource"]:checked').value;
+            
+            if (fileSource === 'drive') {
+                if (!selectedFile) {
+                    showAlert('warning', 'Please select a file from Google Drive');
+                    return;
+                }
+
+                const fileId = selectedFile.id;
+                const fileName = selectedFile.name;
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+                try {
+                    transferStatus.classList.remove('d-none');
+                    uploadBtn.disabled = true;
+
+                    document.getElementById('uploadProgress').style.width = '20%';
+                    document.getElementById('statusText').textContent = 'Processing file from Google Drive...';
+
+                    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+                        headers: {
+                            Authorization: 'Bearer ' + accessToken
+                        }
+                    });
+
+                    if (response.ok) {
+                        document.getElementById('uploadProgress').style.width = '50%';
+                        document.getElementById('statusText').textContent = 'Get file complete!';
+
+                        const blob = await response.blob();
+
+                        const file = new File([blob], fileName, { type: blob.type });
+
+                        const formData = new FormData();
+                        formData.append('file', file);
+
+                        const uploadResponse = await fetch('/upload', {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRFToken': csrfToken
+                            },
+                            body: formData
+                        });
+
+                        const result = await uploadResponse.json();
+                        if (response.ok) {
+                            document.getElementById('uploadProgress').style.width = '100%';
+                            document.getElementById('statusText').textContent = 'Upload complete!';
+                            
+                            document.getElementById('sessionToken').textContent = result.session_token;
+                            document.getElementById('fileHash').textContent = result.file_hash;
+                            document.getElementById('iv').textContent = result.metadata.iv;
+                            document.getElementById('publicKey').textContent = result.metadata.public_key;
+                            document.getElementById('hashType').textContent = result.metadata.hash_type;
+                            
+                            const uploadStep = document.querySelector('.step.active');
+                            const verificationStep = document.querySelector('.step:last-child');
+                            
+                            uploadStep.classList.remove('active');
+                            uploadStep.classList.add('completed');
+                            verificationStep.classList.add('active');
+                            
+                            document.getElementById('uploadForm').style.display = 'none';
+                            document.getElementById('successInfo').classList.remove('d-none');
+                            document.querySelector('#headerbar .col:last-child .step').classList.add('completed');
+                            showTransferSuccess(result);
+                        } else {
+                            showAlert('error', error.error || 'Upload failed');
+                            document.getElementById('uploadProgress').style.width = '0%';
+                            document.getElementById('statusText').textContent = 'Upload failed!';
+                            uploadBtn.disabled = false;
+                        }
+                    } else {
+                        showAlert('error', error.error || 'Upload failed');
+                        document.getElementById('uploadProgress').style.width = '0%';
+                        document.getElementById('statusText').textContent = 'Get file failed!';
+                        uploadBtn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Lỗi khi tải file từ Drive:', error);
+                }
+            }
+        });
+
+        function showTransferSuccess(result) {
+            document.getElementById('sessionToken').textContent = result.session_token;
+            document.getElementById('fileHash').textContent = result.file_hash;
+            document.getElementById('iv').textContent = result.metadata.iv;
+            document.getElementById('publicKey').textContent = result.metadata.public_key;
+            document.getElementById('hashType').textContent = result.metadata.hash_type;
+            
+            transferStatus.classList.add('d-none');
+            successInfo.classList.remove('d-none');
         }
 
         function showAlert(type, message) {
