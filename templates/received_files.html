@@ -114,14 +114,22 @@
                                                 <i class="fas fa-check"></i>
                                             </button>
                                         </form>
-                                        {% endif %}
-                                        <button type="button" class="btn btn-sm btn-primary download-btn"
-                                                {% if file.status != 'verified' %}disabled{% endif %}
-                                                data-session-token="{{ file.session_token }}"
-                                                data-bs-toggle="tooltip"
-                                                data-bs-title="Download File">
-                                            <i class="fas fa-download"></i>
-                                        </button>                                          
+                                        {% endif %}                                        <div class="btn-group">
+                                            <button type="button" class="btn btn-sm btn-primary download-btn"
+                                                    {% if file.status != 'verified' %}disabled{% endif %}
+                                                    data-session-token="{{ file.session_token }}"
+                                                    data-bs-toggle="tooltip"
+                                                    data-bs-title="Download File">
+                                                <i class="fas fa-download"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-primary drive-upload-btn"
+                                                    {% if file.status != 'verified' %}disabled{% endif %}
+                                                    data-file-id="{{ file.id }}"
+                                                    data-bs-toggle="tooltip"
+                                                    data-bs-title="Upload to Drive">
+                                                <i class="fab fa-google-drive"></i>
+                                            </button>
+                                        </div>
                                         <form class="d-inline mark-failed-form" action="{{ url_for('mark_file_failed', file_id=file.id) }}" method="POST">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-sm btn-danger mark-failed-btn"

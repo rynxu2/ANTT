@@ -25,6 +25,9 @@ class UploadSession(db.Model):
     file_size = db.Column(db.Integer)
     file_metadata = db.Column(db.Text)
     filepath = db.Column(db.String(512))
+    drive_file_id = db.Column(db.String(100))  # Google Drive file ID
+    drive_link = db.Column(db.String(512))     # Google Drive web link
+    source_type = db.Column(db.String(10))     # 'local' or 'drive'
     status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

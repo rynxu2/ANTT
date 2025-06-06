@@ -805,6 +805,46 @@ class RealtimeClient {
                 }
             });
         }
+
+        // Handle Drive upload
+        const driveBtn = row.querySelector('.drive-upload-btn');
+        if (driveBtn) {
+            driveBtn.addEventListener('click', async () => {
+                const fileId = driveBtn.dataset.fileId;
+                try {
+                    driveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    driveBtn.disabled = true;
+                    
+                    const response = await fetch('/drive/upload', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                        },
+                        body: `file_id=${fileId}`
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        showAlert('success', 'File uploaded to Drive successfully!');
+                        
+                        // Open Drive link in new tab
+                        if (result.drive_link) {
+                            window.open(result.drive_link, '_blank');
+                        }
+                    } else {
+                        const error = await response.json();
+                        showAlert('error', error.error || 'Failed to upload to Drive');
+                    }
+                } catch (error) {
+                    console.error('Drive upload error:', error);
+                    showAlert('error', 'Failed to upload to Drive: ' + error.message);
+                } finally {
+                    driveBtn.innerHTML = '<i class="fab fa-google-drive"></i>';
+                    driveBtn.disabled = false;
+                }
+            });
+        }
     }
 
     initializeRequestButtons(requestElement) {

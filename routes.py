@@ -37,6 +37,7 @@ from events import (
     notify_access_revoked,
     emit_status_change
 )
+from drive_utils import drive_manager
 import io
 import ipaddress
 
@@ -870,7 +871,6 @@ def request_join_host(host_id):
         elif existing_request.status in ['rejected', 'revoked']:
             existing_request.status = 'pending'
             existing_request.created_at = datetime.utcnow()
-            existing_request.message = f"Hello! {client_ip}"
             existing_request.approved_at = None
             existing_request.rejected_at = None
             existing_request.revoked_at = None
@@ -1029,3 +1029,107 @@ def get_file_metadata(session_token):
     except Exception as e:
         app.logger.error(f"Error getting file metadata: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/drive/upload', methods=['POST'])
+def upload_to_drive():
+    """Upload a file from secure storage to Google Drive"""
+    if 'file_id' not in request.form:
+        return jsonify({'error': 'No file specified'}), 400
+    
+    file_id = request.form['file_id']
+    upload_session = UploadSession.query.filter_by(id=file_id).first()
+    
+    if not upload_session:
+        return jsonify({'error': 'File not found'}), 404
+        
+    try:
+        # Upload file to Drive
+        drive_result = drive_manager.upload_file(upload_session.filepath)
+        if not drive_result:
+            return jsonify({'error': 'Failed to upload to Drive'}), 500
+            
+        # Update database with Drive information
+        upload_session.drive_file_id = drive_result['file_id']
+        upload_session.drive_link = drive_result['web_link']
+        upload_session.source_type = 'drive'
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'drive_link': drive_result['web_link']
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/drive/download/<file_id>', methods=['GET'])
+def download_from_drive(file_id):
+    """Download a file from Google Drive to secure storage"""
+    upload_session = UploadSession.query.filter_by(id=file_id).first()
+    
+    if not upload_session or not upload_session.drive_file_id:
+        return jsonify({'error': 'File not found in Drive'}), 404
+        
+    try:
+        # Generate secure local path
+        local_path = os.path.join(
+            UPLOAD_FOLDER,
+            datetime.now().strftime('%Y'),
+            datetime.now().strftime('%m'),
+            f"drive_{upload_session.filename}"
+        )
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        
+        # Download from Drive
+        if drive_manager.download_file(upload_session.drive_file_id, local_path):
+            # Update database
+            upload_session.filepath = local_path
+            upload_session.source_type = 'local'
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'File downloaded successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to download from Drive'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/drive/pick-file', methods=['POST'])
+def pick_drive_file():
+    """Handle file selection from Google Drive Picker"""
+    data = request.get_json()
+    if 'fileId' not in data:
+        return jsonify({'error': 'No file selected'}), 400
+        
+    file_id = data['fileId']
+    
+    try:
+        # Get file metadata from Drive
+        file = drive_manager.service.files().get(
+            fileId=file_id,
+            fields='id, name, size, webViewLink'
+        ).execute()
+        
+        # Store the Drive file info in session for upload
+        session['selected_drive_file'] = {
+            'id': file['id'],
+            'name': file['name'],
+            'size': file.get('size'),  # May be None for Google Docs
+            'link': file['webViewLink']
+        }
+        
+        return jsonify({
+            'success': True,
+            'file': {
+                'name': file['name'],
+                'size': file.get('size')
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

@@ -86,7 +86,24 @@
             <div class="card-body">
                 <form id="uploadForm" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <!-- File Source Selection -->
                     <div class="mb-4">
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="fileSource" id="localFile" value="local" checked>
+                            <label class="btn btn-outline-primary" for="localFile">
+                                <i class="fas fa-hdd me-2"></i>Local File
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="fileSource" id="driveFile" value="drive">
+                            <label class="btn btn-outline-primary" for="driveFile">
+                                <i class="fab fa-google-drive me-2"></i>Google Drive
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Local File Upload Zone -->
+                    <div id="localUploadZone" class="mb-4">
                         <div class="upload-zone p-5 text-center border rounded">
                             <i class="fas fa-cloud-upload-alt display-4 text-muted mb-3"></i>
                             <h5>Drag & Drop File Here</h5>
@@ -99,7 +116,29 @@
                         </div>
                     </div>
 
-                    <div id="fileInfo" class="mb-4 d-none">
+                    <!-- Google Drive File Selection -->
+                    <div id="driveUploadZone" class="mb-4 d-none">
+                        <div class="drive-zone p-5 text-center border rounded">
+                            <i class="fab fa-google-drive display-4 text-muted mb-3"></i>
+                            <h5>Select File from Google Drive</h5>
+                            <p class="text-muted">Click the button below to browse your Drive</p>
+                            <button type="button" id="pickFromDrive" class="btn btn-primary">
+                                <i class="fab fa-google-drive me-2"></i>
+                                Pick from Drive
+                            </button>
+                            
+                            <div id="selectedDriveFile" class="mt-4 d-none">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-file me-2"></i>
+                                    Selected file: <span id="driveFileName"></span>
+                                    <button type="button" class="btn-close float-end" id="clearDriveSelection"></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- File Details -->
+                    <div id="fileDetails" class="d-none">
                         <div class="card">
                             <div class="card-body">
                                 <h5 class="mb-3">File Information</h5>
@@ -181,6 +220,29 @@
         const uploadBtn = document.getElementById('uploadBtn');
         const transferStatus = document.getElementById('transferStatus');
         const successInfo = document.getElementById('successInfo');
+        const localUploadZone = document.getElementById('localUploadZone');
+        const driveUploadZone = document.getElementById('driveUploadZone');
+        const pickFromDrive = document.getElementById('pickFromDrive');
+        const driveFileName = document.getElementById('driveFileName');
+        const selectedDriveFile = document.getElementById('selectedDriveFile');
+        const clearDriveSelection = document.getElementById('clearDriveSelection');
+        
+        // File source selection
+        document.querySelectorAll('input[name="fileSource"]').forEach((input) => {
+            input.addEventListener('change', (e) => {
+                if (e.target.value === 'local') {
+                    localUploadZone.classList.remove('d-none');
+                    driveUploadZone.classList.add('d-none');
+                    fileInput.value = ''; // Clear file input
+                    fileInfo.classList.add('d-none');
+                } else {
+                    localUploadZone.classList.add('d-none');
+                    driveUploadZone.classList.remove('d-none');
+                    fileInput.value = ''; // Clear file input
+                    fileInfo.classList.add('d-none');
+                }
+            });
+        });
         
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -216,6 +278,31 @@
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Google Drive integration
+        document.getElementById('pickFromDrive').addEventListener('click', function() {
+            // Open Google Drive file picker
+            openDrivePicker();
+        });
+        
+        document.getElementById('clearDriveSelection').addEventListener('click', function() {
+            selectedDriveFile.classList.add('d-none');
+            driveFileName.textContent = '';
+            uploadBtn.disabled = true;
+        });
+
+        function openDrivePicker() {
+            // Placeholder for Google Drive picker integration
+            // You need to implement the Google Drive API integration here
+            // On file select, update the driveFileName and enable the upload button
+            
+            // For demonstration, we'll just simulate file selection
+            setTimeout(() => {
+                driveFileName.textContent = 'SampleFile.txt';
+                selectedDriveFile.classList.remove('d-none');
+                uploadBtn.disabled = false;
+            }, 1000);
         }
 
         function showAlert(type, message) {
