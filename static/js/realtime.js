@@ -299,7 +299,7 @@ class RealtimeClient {
             return;
         }
         console.log("Found file row:", fileRow);
-        const statusCell = fileRow.querySelector('td:nth-child(5)');
+        const statusCell = fileRow.querySelector('td:nth-child(4)');
         if (statusCell) {
             console.log("Updating status cell with new status:", data.status);
             let statusHtml = '';
@@ -415,62 +415,26 @@ class RealtimeClient {
                 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');            
                 if (data.status === 'failed') {
                     actionCell.innerHTML = `
-                        <div class="btn-group">
-                            <button class="btn btn-sm btn-primary" disabled>
-                                <i class="fas fa-download"></i>
-                            </button>
-                            <button class="btn btn-sm btn-danger" disabled>
-                                <i class="fas fa-times-circle me-1"></i>
+                        <div style="display: flex; gap: 3px; justify-content: center;">
+                            <button type="button" class="btn btn-sm btn-info verify-details-btn"
+                                    data-session-token="${csrfToken}"
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-title="View Verification Details">
+                                <i class="fas fa-shield-alt"></i>
                             </button>
                         </div>
                     `;
                 } else if (data.status === 'verified') {
                     actionCell.innerHTML = `
-                        <div class="btn-group">
-                            <a href="/download/${data.session_token}" class="btn btn-sm btn-primary" target="_blank">
-                                <i class="fas fa-download"></i>
-                            </a>
-                            <button type="button" class="btn btn-sm btn-danger mark-failed" data-file-id="${fileRow.getAttribute('data-file-id')}">
-                                <i class="fas fa-times-circle me-1"></i>
+                        <div style="display: flex; gap: 3px; justify-content: center;">
+                            <button type="button" class="btn btn-sm btn-info verify-details-btn"
+                                    data-session-token="${csrfToken}"
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-title="View Verification Details">
+                                <i class="fas fa-shield-alt"></i>
                             </button>
                         </div>
                     `;
-                    
-                    const markFailedBtn = actionCell.querySelector('.mark-failed');
-                    if (markFailedBtn) {
-                        markFailedBtn.addEventListener('click', () => {
-                            if (confirm('Are you sure you want to mark this file as failed?')) {
-                                fetch('/mark_file_failed/' + markFailedBtn.getAttribute('data-file-id'), {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRFToken': csrfToken
-                                    }
-                                })
-                                .then(response => {
-                                    if (response.ok) {
-                                        return response.json();
-                                    }
-                                    throw new Error('Failed to update file status');
-                                })
-                                .then(result => {
-                                    const statusCell = fileRow.querySelector('td:nth-child(5)');
-                                    if (statusCell) {
-                                        statusCell.innerHTML = `
-                                            <span class="badge bg-danger">
-                                                <i class="fas fa-times-circle me-1"></i>Failed
-                                            </span>
-                                        `;
-                                    }
-                                    this.highlightRow(fileRow, 'failed');
-                                })
-                                .catch(error => {
-                                    console.error('Error:', error);
-                                    showAlert('danger', error.message);
-                                });
-                            }
-                        });
-                    }
                 } else if (data.status === 'downloaded') {
                     const badge = statusCell.querySelector('.badge');
                     if (badge) {
@@ -479,9 +443,84 @@ class RealtimeClient {
                     }
                     showAlert('info', 'File has been downloaded by the recipient');
                 }
-            }    
+            }
+
+            const verificationModal = document.getElementById('verificationModal');
+            const verificationModalInstance = new bootstrap.Modal(verificationModal);
+
+            fileRow.querySelector('.verify-details-btn').addEventListener('click', async () => {
+                let currentSessionToken = data.session_token;
+                try {
+                    const response = await fetch(`/file_metadata/${currentSessionToken}`);
+                    if (response.ok) {
+                        const metadata = await response.json();
+
+                        const status = metadata.status
+                        const errorStep = metadata.fail_step || null;
+                        const errorMessage = metadata.error_message || null;
+                        
+                        this.showModalContent('verification-process');
+                        document.getElementById('verification-success').classList.remove('d-none');
+                        document.getElementById('downloadVerifiedBtn').classList.remove('d-none');
+                        document.getElementById('uploadDriveBtn').classList.remove('d-none');
+                        document.querySelector('.verification-head').classList.add('d-none');
+                        document.getElementById('proceedVerifyBtn').classList.add('d-none');
+
+                        document.querySelectorAll('.verification-step').forEach(step => {
+                            if (errorStep !== null && step.id === errorStep) {
+                                step.classList.add('error');
+                                step.style.opacity = '1';
+                                const progressBar = step.querySelector('.progress-ring-bar');
+                                progressBar.style.strokeDashoffset = '0';
+                                progressBar.style.stroke = '#dc3545';
+                                const waitingIcon = step.querySelector('.step-waiting');
+                                const errorIcon = step.querySelector('.step-error');
+                                const bgIcon = step.querySelector('.step-icon');
+                                if (waitingIcon) waitingIcon.classList.add('d-none');
+                                if (errorIcon) errorIcon.classList.remove('d-none');
+                                if (bgIcon) bgIcon.classList.add('bg-danger');
+
+                                const details = step.querySelector('.step-details');
+                                details.innerHTML = `<small class="text-danger">✗ ${errorMessage}</small>`;
+                                details.classList.remove('d-none');
+                            } else {
+                                step.classList.add('completed');
+                                step.style.opacity = '1';
+                                const progressBar = step.querySelector('.progress-ring-bar');
+                                progressBar.style.strokeDashoffset = '0';
+                                progressBar.style.stroke = '#198754';
+                                const waitingIcon = step.querySelector('.step-waiting');
+                                const successIcon = step.querySelector('.step-success');
+                                const bgIcon = step.querySelector('.step-icon');
+                                if (waitingIcon) waitingIcon.classList.add('d-none');
+                                if (successIcon) successIcon.classList.remove('d-none');
+                                if (bgIcon) bgIcon.classList.add('bg-success');
+                            }
+                        });
+
+                        verificationModalInstance.show();
+                    } else {
+                        const error = await response.json();
+                        alert(error.error || 'Failed to fetch file metadata');
+                    }
+                } catch (error) {
+                    console.error('Error fetching metadata:', error);
+                    alert('Failed to fetch file metadata: ' + error.message);
+                }
+            })  
         }
         this.highlightRow(fileRow, data.status);
+    }
+
+    showModalContent(contentClass) {
+        ['verification-info', 'verification-process', 'verification-error'].forEach(cls => {
+            document.querySelector(`.${cls}`).classList.add('d-none');
+        });
+        document.querySelector(`.${contentClass}`).classList.remove('d-none');
+
+        if (contentClass !== 'verification-process') {
+            document.getElementById('verification-success').classList.add('d-none');
+        }
     }
 
     highlightRow(row, status) {

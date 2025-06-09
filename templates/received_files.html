@@ -167,33 +167,21 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
-                                    <div style="display: flex; gap: 3px">
+                                    <div style="display: flex; gap: 3px; justify-content: center;">
                                         {% if file.status == 'pending' %}
                                         <button type="submit" class="btn btn-sm btn-success verify-btn"
                                                 data-csrf-token="{{ csrf_token() }}"
                                                 data-session-token="{{ file.session_token }}"
+                                                data-file-id="{{ file.id }}"
                                                 data-bs-toggle="tooltip"
                                                 data-bs-title="Verify File">
                                             <i class="fas fa-check"></i>
                                         </button>
-                                        {% endif %}           
-                                        <button type="button" class="btn btn-sm btn-primary download-btn"
-                                                {% if file.status != 'verified' %}disabled{% endif %}
-                                                data-session-token="{{ file.session_token }}"
-                                                data-bs-toggle="tooltip"
-                                                data-bs-title="Download File">
-                                            <i class="fas fa-download"></i>
-                                        </button>                                        
-                                        <button type="button" class="btn btn-sm btn-primary drive-upload-btn"
-                                                {% if file.status != 'verified' %}disabled{% endif %}
-                                                data-file-id="{{ file.id }}"
-                                                data-bs-toggle="tooltip"
-                                                data-bs-title="Upload to Drive">
-                                            <i class="fab fa-google-drive"></i>
-                                        </button>
-                                        {% if file.status != 'verified' %}
+                                        {% endif %}
+                                        {% if file.status != 'pending' %}
                                         <button type="button" class="btn btn-sm btn-info verify-details-btn"
                                                 data-session-token="{{ file.session_token }}"
+                                                data-file-id="{{ file.id }}"
                                                 data-bs-toggle="tooltip" 
                                                 data-bs-title="View Verification Details">
                                             <i class="fas fa-shield-alt"></i>
@@ -221,19 +209,19 @@
         <!-- Verification Details Modal -->
         <div class="modal fade" id="verificationModal" tabindex="-1">
             <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
+                <div class="modal-content shadow-lg border-0">
+                    <div class="modal-header bg-primary text-white align-items-center">
+                        <h5 class="modal-title d-flex align-items-center">
                             <i class="fas fa-shield-alt me-2"></i>
                             File Verification Details
                         </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body bg-light">
                         <!-- File Information (Initial View) -->
                         <div class="verification-info" id="verification-info">
                             <div class="mb-4">
-                                <h6>File Information</h6>
+                                <h6 class="fw-bold text-primary"><i class="fas fa-info-circle me-2"></i>File Information</h6>
                                 <div class="row g-3">
                                     <div class="col-md-6">
                                         <p><strong>Filename:</strong><br>
@@ -245,27 +233,25 @@
                                     </div>
                                 </div>
                             </div>
-
                             <div class="mb-4">
-                                <h6>Cryptographic Information</h6>
+                                <h6 class="fw-bold text-primary"><i class="fas fa-lock me-2"></i>Cryptographic Information</h6>
                                 <div class="row g-3">
                                     <div class="col-12">
                                         <p><strong>Initialization Vector (IV):</strong><br>
-                                            <code id="modal-iv" class="d-block mb-2 p-2 bg-light rounded"></code></p>
+                                            <code id="modal-iv" class="d-block mb-2 p-2 bg-light rounded border"></code></p>
                                     </div>
                                     <div class="col-12">
                                         <p><strong>File Hash (SHA-512):</strong><br>
-                                            <code id="modal-file-hash" class="d-block mb-2 p-2 bg-light rounded word-wrap"></code></p>
+                                            <code id="modal-file-hash" class="d-block mb-2 p-2 bg-light rounded border word-wrap"></code></p>
                                     </div>
                                     <div class="col-12">
                                         <p><strong>Metadata Signature:</strong><br>
-                                            <code id="modal-signature" class="d-block mb-2 p-2 bg-light rounded word-wrap"></code></p>
+                                            <code id="modal-signature" class="d-block mb-2 p-2 bg-light rounded border word-wrap"></code></p>
                                     </div>
                                 </div>
                             </div>
-
                             <div class="mb-4">
-                                <h6>Sender's Information</h6>
+                                <h6 class="fw-bold text-primary"><i class="fas fa-user me-2"></i>Sender's Information</h6>
                                 <div class="row g-3">
                                     <div class="col-12">
                                         <p><strong>IP Address:</strong><br>
@@ -275,7 +261,7 @@
                                         <p><strong>Public Key:</strong></p>
                                         <details>
                                             <summary class="text-primary" style="cursor: pointer">Show Public Key</summary>
-                                            <pre><code id="modal-sender-key" class="d-block mt-2 p-2 bg-light rounded small"></code></pre>
+                                            <pre><code id="modal-sender-key" class="d-block mt-2 p-2 bg-light rounded border small"></code></pre>
                                         </details>
                                     </div>
                                 </div>
@@ -284,171 +270,20 @@
 
                         <!-- Step-by-Step Verification Process -->
                         <div class="verification-process d-none" id="verification-process">
-                            <div class="text-center mb-4">
-                                <h5>File Verification Process</h5>
+                            <div class="verification-head text-center mb-4">
+                                <h5 class="fw-bold text-primary">File Verification Process</h5>
                                 <p class="text-muted">Please wait while we verify your file through multiple security checks</p>
                             </div>
-
-                            <!-- Verification Steps -->
-                            <div class="verification-steps">
-                                <!-- Step 1: IP Verification -->
-                                <div class="verification-step mb-4" id="step-ip">
-                                    <div class="step-header d-flex align-items-center">
-                                        <div class="step-indicator me-3">
-                                            <div class="step-circle">
-                                                <div class="step-progress">
-                                                    <svg class="progress-ring" width="40" height="40">
-                                                        <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#e9ecef" stroke-width="2"/>
-                                                        <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#0d6efd" stroke-width="2" 
-                                                                pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
-                                                    </svg>
-                                                    <div class="step-icon">
-                                                        <i class="fas fa-globe step-waiting"></i>
-                                                        <i class="fas fa-check step-success d-none"></i>
-                                                        <i class="fas fa-times step-error d-none"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="step-content flex-grow-1">
-                                            <h6 class="step-title mb-1">Kiểm tra IP người gửi</h6>
-                                            <p class="step-description text-muted mb-0">Xác minh địa chỉ IP của người gửi</p>
-                                            <div class="step-details mt-2 d-none">
-                                                <small class="text-success">✓ IP address verified successfully</small>
-                                            </div>
-                                        </div>
+                            <!-- Tổng quan trạng thái -->
+                            <div class="mb-4 status-loader">
+                                <div class="d-flex justify-content-center align-items-center gap-3">
+                                    <div id="overall-status" class="badge bg-secondary px-3 py-2 fs-6">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Verifying...
                                     </div>
                                 </div>
-
-                                <!-- Step 2: Digital Signature -->
-                                <div class="verification-step mb-4" id="step-signature">
-                                    <div class="step-header d-flex align-items-center">
-                                        <div class="step-indicator me-3">
-                                            <div class="step-circle">
-                                                <div class="step-progress">
-                                                    <svg class="progress-ring" width="40" height="40">
-                                                        <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#e9ecef" stroke-width="2"/>
-                                                        <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#0d6efd" stroke-width="2" 
-                                                                pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
-                                                    </svg>
-                                                    <div class="step-icon">
-                                                        <i class="fas fa-signature step-waiting"></i>
-                                                        <i class="fas fa-check step-success d-none"></i>
-                                                        <i class="fas fa-times step-error d-none"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="step-content flex-grow-1">
-                                            <h6 class="step-title mb-1">Xác minh chữ ký số (RSA/SHA-512)</h6>
-                                            <p class="step-description text-muted mb-0">Kiểm tra tính xác thực của file</p>
-                                            <div class="step-details mt-2 d-none">
-                                                <small class="text-success">✓ Digital signature verified successfully</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Step 3: Hash Integrity -->
-                                <div class="verification-step mb-4" id="step-hash">
-                                    <div class="step-header d-flex align-items-center">
-                                        <div class="step-indicator me-3">
-                                            <div class="step-circle">
-                                                <div class="step-progress">
-                                                    <svg class="progress-ring" width="40" height="40">
-                                                        <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#e9ecef" stroke-width="2"/>
-                                                        <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#0d6efd" stroke-width="2" 
-                                                                pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
-                                                    </svg>
-                                                    <div class="step-icon">
-                                                        <i class="fas fa-fingerprint step-waiting"></i>
-                                                        <i class="fas fa-check step-success d-none"></i>
-                                                        <i class="fas fa-times step-error d-none"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="step-content flex-grow-1">
-                                            <h6 class="step-title mb-1">Kiểm tra tính toàn vẹn (Hash)</h6>
-                                            <p class="step-description text-muted mb-0">Xác minh file không bị thay đổi</p>
-                                            <div class="step-details mt-2 d-none">
-                                                <small class="text-success">✓ File integrity verified successfully</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Step 4: RSA Decryption -->
-                                <div class="verification-step mb-4" id="step-rsa">
-                                    <div class="step-header d-flex align-items-center">
-                                        <div class="step-indicator me-3">
-                                            <div class="step-circle">
-                                                <div class="step-progress">
-                                                    <svg class="progress-ring" width="40" height="40">
-                                                        <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#e9ecef" stroke-width="2"/>
-                                                        <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#0d6efd" stroke-width="2" 
-                                                                pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
-                                                    </svg>
-                                                    <div class="step-icon">
-                                                        <i class="fas fa-key step-waiting"></i>
-                                                        <i class="fas fa-check step-success d-none"></i>
-                                                        <i class="fas fa-times step-error d-none"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="step-content flex-grow-1">
-                                            <h6 class="step-title mb-1">Giải mã AES Session Key (RSA)</h6>
-                                            <p class="step-description text-muted mb-0">Giải mã khóa phiên bằng RSA</p>
-                                            <div class="step-details mt-2 d-none">
-                                                <small class="text-success">✓ Session key decrypted successfully</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Step 5: File Decryption -->
-                                <div class="verification-step mb-4" id="step-decrypt">
-                                    <div class="step-header d-flex align-items-center">
-                                        <div class="step-indicator me-3">
-                                            <div class="step-circle">
-                                                <div class="step-progress">
-                                                    <svg class="progress-ring" width="40" height="40">
-                                                        <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#e9ecef" stroke-width="2"/>
-                                                        <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
-                                                                fill="transparent" stroke="#0d6efd" stroke-width="2" 
-                                                                pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
-                                                    </svg>
-                                                    <div class="step-icon">
-                                                        <i class="fas fa-unlock step-waiting"></i>
-                                                        <i class="fas fa-check step-success d-none"></i>
-                                                        <i class="fas fa-times step-error d-none"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="step-content flex-grow-1">
-                                            <h6 class="step-title mb-1">Giải mã file</h6>
-                                            <p class="step-description text-muted mb-0">Giải mã nội dung file bằng AES</p>
-                                            <div class="step-details mt-2 d-none">
-                                                <small class="text-success">✓ File decrypted successfully</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>                            </div>
-                            
-                            <!-- Success Summary -->
-                            <div class="verification-success text-center mt-5 d-none" id="verification-success">
-                                <i class="fas fa-check-circle text-success display-1 mb-3"></i>
+                            </div>
+                            <div class="verification-success text-center d-none" id="verification-success">
+                                <i class="fas fa-check-circle text-success display-1 mb-3 animate__animated animate__tada"></i>
                                 <h5 class="text-success">Verification Successful!</h5>
                                 <p>The file has been verified and is safe to download.</p>
                                 <div class="verification-summary mt-4">
@@ -468,21 +303,184 @@
                                     </div>
                                 </div>
                             </div>
+                            <!-- Verification Steps (grouped, with animation) -->
+                            <div class="verification-steps row row-cols-1 row-cols-md-2 g-4">
+                                <div class="col">
+                                    <!-- Step 1: IP Verification -->
+                                    <div class="verification-step mb-4 shadow-sm rounded bg-white p-3 animate__animated animate__fadeInLeft" id="step-ip">
+                                        <div class="step-header d-flex align-items-center">
+                                            <div class="step-indicator me-3">
+                                                <div class="step-circle">
+                                                    <div class="step-progress">
+                                                        <svg class="progress-ring" width="40" height="40">
+                                                            <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#e9ecef" stroke-width="2"/>
+                                                            <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#0d6efd" stroke-width="2" 
+                                                                    pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+                                                        </svg>
+                                                        <div class="step-icon">
+                                                            <i class="fas fa-globe step-waiting"></i>
+                                                            <i class="fas fa-check step-success d-none"></i>
+                                                            <i class="fas fa-times step-error d-none"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="step-content flex-grow-1">
+                                                <h6 class="step-title mb-1">Kiểm tra IP người gửi</h6>
+                                                <p class="step-description text-muted mb-0">Xác minh địa chỉ IP của người gửi</p>
+                                                <div class="step-details mt-2 d-none">
+                                                    <small class="text-success">✓ IP address verified successfully</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Step 3: Hash Integrity -->
+                                    <div class="verification-step mb-4 shadow-sm rounded bg-white p-3 animate__animated animate__fadeInLeft" id="step-hash">
+                                        <div class="step-header d-flex align-items-center">
+                                            <div class="step-indicator me-3">
+                                                <div class="step-circle">
+                                                    <div class="step-progress">
+                                                        <svg class="progress-ring" width="40" height="40">
+                                                            <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#e9ecef" stroke-width="2"/>
+                                                            <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#0d6efd" stroke-width="2" 
+                                                                    pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+                                                        </svg>
+                                                        <div class="step-icon">
+                                                            <i class="fas fa-fingerprint step-waiting"></i>
+                                                            <i class="fas fa-check step-success d-none"></i>
+                                                            <i class="fas fa-times step-error d-none"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="step-content flex-grow-1">
+                                                <h6 class="step-title mb-1">Kiểm tra tính toàn vẹn (Hash)</h6>
+                                                <p class="step-description text-muted mb-0">Xác minh file không bị thay đổi</p>
+                                                <div class="step-details mt-2 d-none">
+                                                    <small class="text-success">✓ File integrity verified successfully</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Step 5: File Decryption -->
+                                    <div class="verification-step mb-4 shadow-sm rounded bg-white p-3 animate__animated animate__fadeInLeft" id="step-decrypt">
+                                        <div class="step-header d-flex align-items-center">
+                                            <div class="step-indicator me-3">
+                                                <div class="step-circle">
+                                                    <div class="step-progress">
+                                                        <svg class="progress-ring" width="40" height="40">
+                                                            <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#e9ecef" stroke-width="2"/>
+                                                            <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#0d6efd" stroke-width="2" 
+                                                                    pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+                                                        </svg>
+                                                        <div class="step-icon">
+                                                            <i class="fas fa-unlock step-waiting"></i>
+                                                            <i class="fas fa-check step-success d-none"></i>
+                                                            <i class="fas fa-times step-error d-none"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="step-content flex-grow-1">
+                                                <h6 class="step-title mb-1">Giải mã file</h6>
+                                                <p class="step-description text-muted mb-0">Giải mã nội dung file bằng AES</p>
+                                                <div class="step-details mt-2 d-none">
+                                                    <small class="text-success">✓ File decrypted successfully</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col">
+                                    <!-- Step 2: Digital Signature -->
+                                    <div class="verification-step mb-4 shadow-sm rounded bg-white p-3 animate__animated animate__fadeInRight" id="step-signature">
+                                        <div class="step-header d-flex align-items-center">
+                                            <div class="step-indicator me-3">
+                                                <div class="step-circle">
+                                                    <div class="step-progress">
+                                                        <svg class="progress-ring" width="40" height="40">
+                                                            <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#e9ecef" stroke-width="2"/>
+                                                            <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#0d6efd" stroke-width="2" 
+                                                                    pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+                                                        </svg>
+                                                        <div class="step-icon">
+                                                            <i class="fas fa-signature step-waiting"></i>
+                                                            <i class="fas fa-check step-success d-none"></i>
+                                                            <i class="fas fa-times step-error d-none"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="step-content flex-grow-1">
+                                                <h6 class="step-title mb-1">Xác minh chữ ký số (RSA/SHA-512)</h6>
+                                                <p class="step-description text-muted mb-0">Kiểm tra tính xác thực của file</p>
+                                                <div class="step-details mt-2 d-none">
+                                                    <small class="text-success">✓ Digital signature verified successfully</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Step 4: RSA Decryption -->
+                                    <div class="verification-step mb-4 shadow-sm rounded bg-white p-3 animate__animated animate__fadeInRight" id="step-rsa">
+                                        <div class="step-header d-flex align-items-center">
+                                            <div class="step-indicator me-3">
+                                                <div class="step-circle">
+                                                    <div class="step-progress">
+                                                        <svg class="progress-ring" width="40" height="40">
+                                                            <circle class="progress-ring-circle" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#e9ecef" stroke-width="2"/>
+                                                            <circle class="progress-ring-bar" cx="20" cy="20" r="18" 
+                                                                    fill="transparent" stroke="#0d6efd" stroke-width="2" 
+                                                                    pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+                                                        </svg>
+                                                        <div class="step-icon">
+                                                            <i class="fas fa-key step-waiting"></i>
+                                                            <i class="fas fa-check step-success d-none"></i>
+                                                            <i class="fas fa-times step-error d-none"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="step-content flex-grow-1">
+                                                <h6 class="step-title mb-1">Giải mã AES Session Key (RSA)</h6>
+                                                <p class="step-description text-muted mb-0">Giải mã khóa phiên bằng RSA</p>
+                                                <div class="step-details mt-2 d-none">
+                                                    <small class="text-success">✓ Session key decrypted successfully</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Error State -->
                         <div class="verification-error text-center d-none" id="verification-error">
-                            <i class="fas fa-times-circle text-danger display-1 mb-3"></i>
+                            <i class="fas fa-times-circle text-danger display-1 mb-3 animate__animated animate__shakeX"></i>
                             <h5 class="text-danger">Verification Failed</h5>
                             <p id="verification-error-message">An error occurred during verification.</p>
                             <div class="verification-error-details mt-4">
                                 <div class="alert alert-danger">
                                     <strong>Security Warning:</strong> This file failed one or more security checks and should not be trusted.
                                 </div>
+                                <div class="alert alert-warning mt-2">
+                                    <strong>Tip:</strong> Please contact the sender or try verifying another file.
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer">
+                    <div class="modal-footer bg-light border-0">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                         <button type="button" id="proceedVerifyBtn" class="btn btn-success" data-session-token="">
                             <i class="fas fa-check me-2"></i>
@@ -491,6 +489,10 @@
                         <button type="button" id="downloadVerifiedBtn" class="btn btn-primary d-none">
                             <i class="fas fa-download me-2"></i>
                             Download File
+                        </button>
+                        <button type="button" id="uploadDriveBtn" class="btn btn-primary">
+                            <i class="fab fa-google-drive me-2"></i>
+                            Upload to Drive
                         </button>
                     </div>
                 </div>
@@ -505,13 +507,15 @@
 document.addEventListener('DOMContentLoaded', function() {
     const verificationModal = document.getElementById('verificationModal');
     const verificationModalInstance = new bootstrap.Modal(verificationModal);
-    let currentSessionToken = null;    function showModalContent(contentClass) {
+    let currentSessionToken = null;
+    let currentFileId = null;
+
+    function showModalContent(contentClass) {
         ['verification-info', 'verification-process', 'verification-error'].forEach(cls => {
             document.querySelector(`.${cls}`).classList.add('d-none');
         });
         document.querySelector(`.${contentClass}`).classList.remove('d-none');
-        
-        // Reset success state when switching views
+
         if (contentClass !== 'verification-process') {
             document.getElementById('verification-success').classList.add('d-none');
         }
@@ -606,16 +610,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     throw new Error(`${step.name} failed`);
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
             document.getElementById('verification-success').classList.remove('d-none');
             document.getElementById('downloadVerifiedBtn').classList.remove('d-none');
+            document.getElementById('uploadDriveBtn').classList.remove('d-none');
+            document.querySelector('.verification-head').classList.add('d-none');
             document.getElementById('proceedVerifyBtn').disabled = false;
 
-            setTimeout(() => {
-                verificationModalInstance.hide();
-                location.reload();
-            }, 5000);
+            const finalize = await fetch(`/verify/${sessionToken}/complete`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            });
+
+            const result = await finalize.json();
+            if (finalize.ok) {
+                setTimeout(() => {
+                    document.getElementById('overall-status').textContent = 'Verification Completed Successfully';
+                    document.getElementById('overall-status').classList.remove('bg-secondary');
+                    document.getElementById('overall-status').classList.add('bg-success');
+                }, 1000);
+                document.querySelector('.status-loader').classList.add('d-none');
+                setTimeout(() => {
+                    verificationModalInstance.hide();
+                }, 3000);
+            } else {
+                throw new Error(result.error || 'Finalization failed');
+            }
 
         } catch (error) {
             console.error('Verification failed:', error);
@@ -631,24 +654,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 const response = await fetch(`/file_metadata/${currentSessionToken}`);
                 if (response.ok) {
                     const metadata = await response.json();
+
+                    const status = metadata.status
+                    const errorStep = metadata.fail_step || null;
+                    const errorMessage = metadata.error_message || null;
                     
                     showModalContent('verification-process');
                     document.getElementById('verification-success').classList.remove('d-none');
                     document.getElementById('downloadVerifiedBtn').classList.remove('d-none');
+                    document.getElementById('uploadDriveBtn').classList.remove('d-none');
+                    document.querySelector('.verification-head').classList.add('d-none');
                     document.getElementById('proceedVerifyBtn').classList.add('d-none');
-                    
+
                     document.querySelectorAll('.verification-step').forEach(step => {
-                        step.classList.add('completed');
-                        step.style.opacity = '1';
-                        const progressBar = step.querySelector('.progress-ring-bar');
-                        progressBar.style.strokeDashoffset = '0';
-                        progressBar.style.stroke = '#198754';
-                        const waitingIcon = step.querySelector('.step-waiting');
-                        const successIcon = step.querySelector('.step-success');
-                        if (waitingIcon) waitingIcon.classList.add('d-none');
-                        if (successIcon) successIcon.classList.remove('d-none');
+                        if (errorStep !== null && step.id === errorStep) {
+                            step.classList.add('error');
+                            step.style.opacity = '1';
+                            const progressBar = step.querySelector('.progress-ring-bar');
+                            progressBar.style.strokeDashoffset = '0';
+                            progressBar.style.stroke = '#dc3545';
+                            const waitingIcon = step.querySelector('.step-waiting');
+                            const errorIcon = step.querySelector('.step-error');
+                            const bgIcon = step.querySelector('.step-icon');
+                            if (waitingIcon) waitingIcon.classList.add('d-none');
+                            if (errorIcon) errorIcon.classList.remove('d-none');
+                            if (bgIcon) bgIcon.classList.add('bg-danger');
+
+                            const details = step.querySelector('.step-details');
+                            details.innerHTML = `<small class="text-danger">✗ ${errorMessage}</small>`;
+                            details.classList.remove('d-none');
+                        } else {
+                            step.classList.add('completed');
+                            step.style.opacity = '1';
+                            const progressBar = step.querySelector('.progress-ring-bar');
+                            progressBar.style.strokeDashoffset = '0';
+                            progressBar.style.stroke = '#198754';
+                            const waitingIcon = step.querySelector('.step-waiting');
+                            const successIcon = step.querySelector('.step-success');
+                            const bgIcon = step.querySelector('.step-icon');
+                            if (waitingIcon) waitingIcon.classList.add('d-none');
+                            if (successIcon) successIcon.classList.remove('d-none');
+                            if (bgIcon) bgIcon.classList.add('bg-success');
+                        }
                     });
-                    
+
                     verificationModalInstance.show();
                 } else {
                     const error = await response.json();
@@ -663,7 +712,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.querySelectorAll('.verify-btn').forEach(btn => {
         btn.addEventListener('click', async function(e) {
-            currentSessionToken = this.dataset.sessionToken;
+            currentSessionToken = this.dataset.sessionToken
+            currentFileId = this.dataset.fileId;
 
             try {
                 const response = await fetch(`/file_metadata/${currentSessionToken}`);
@@ -681,6 +731,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     showModalContent('verification-info');
                     document.getElementById('proceedVerifyBtn').disabled = false;
                     document.getElementById('downloadVerifiedBtn').classList.add('d-none');
+                    document.getElementById('uploadDriveBtn').classList.add('d-none');
                     
                     verificationModalInstance.show();
                 } else {
@@ -705,18 +756,10 @@ document.addEventListener('DOMContentLoaded', function() {
             verificationModalInstance.hide();
         }
     });
-  
-    document.querySelectorAll('.download-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            if (!this.disabled) {
-                const sessionToken = this.dataset.sessionToken;
-                window.location.href = `/download/${sessionToken}`;
-            }
-        });
-    });
 
-    document.querySelector('.drive-upload-btn').addEventListener('click', async function(event) {
-        const fileId = event.currentTarget.getAttribute('data-file-id');
+    document.getElementById('uploadDriveBtn').addEventListener('click', async function(event) {
+        if (!currentFileId) throw new Error('No file selected');
+
         const driveBtn = event.currentTarget;
         try {
             driveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -728,7 +771,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
                 },
-                body: `file_id=${fileId}`
+                body: `file_id=${currentFileId}`
             });
             
             if (response.ok) {

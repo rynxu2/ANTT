@@ -205,7 +205,7 @@ def add_host():
         flash('A host with this name already exists for your IP', 'error')
         return redirect(url_for('receiver_hosts'))
     
-    ip_mapping = IPHostKeyMapping.query.filter_by(host_ip=host_ip).first()
+    ip_mapping = IPHostKeyMapping.query.filter_by(host_ip=host_ip, host_name=name).first()
     if not ip_mapping:
         try:
             public_key_pem, private_key_pem = generate_rsa_keypair()
@@ -798,7 +798,7 @@ def verify_file(session_token):
 
 @app.route('/transfer_status/<session_token>')
 def transfer_status(session_token):
-    """Get current status of a file transfer session"""
+    """Get status of a file transfer session"""
     app.logger.info(f"Checking status for session: {session_token}")
     
     upload_session = UploadSession.query.filter_by(session_token=session_token).first()
@@ -1047,7 +1047,10 @@ def get_file_metadata(session_token):
             'signature': metadata['metadata_signature'],
             'sender_key': IPUserKeyMapping.query.filter_by(
                 ip_address=upload_session.sender_ip
-            ).first().public_key_pem
+            ).first().public_key_pem,
+            'status': upload_session.status,
+            'fail_step':  upload_session.fail_step if hasattr(upload_session, 'fail_step') else None,
+            'error_message': upload_session.error_message if hasattr(upload_session, 'error_message') else None
         }
 
         return jsonify(decoded_metadata)
@@ -1166,6 +1169,9 @@ def verify_ip(session_token):
 
     client_ip = get_client_ip()
     if upload_session.receiver_ip != client_ip:
+        upload_session.update_fail_info('ip', 'Unauthorized IP address')
+        db.session.commit()
+        notify_status_change(upload_session)
         return jsonify({'error': 'Unauthorized'}), 403
 
     return jsonify({'message': 'IP verified successfully'})
@@ -1182,7 +1188,11 @@ def verify_signature_route(session_token):
         sender_keys.public_key_pem
     )
     if not is_valid:
+        upload_session.update_fail_info('signature', 'Invalid signature')
+        db.session.commit()
+        notify_status_change(upload_session)
         return jsonify({'error': 'Invalid signature'}), 400
+
     return jsonify({'message': 'Signature verified'})
 
 @app.route('/verify/<session_token>/metadata', methods=['POST'])
@@ -1191,11 +1201,17 @@ def verify_metadata(session_token):
     metadata = upload_session.get_metadata()
 
     if metadata['metadata']['sender_ip'] != upload_session.sender_ip:
+        upload_session.update_fail_info('hash', 'Sender IP mismatch')
+        db.session.commit()
+        notify_status_change(upload_session)
         return jsonify({'error': 'Sender IP mismatch'}), 400
 
     try:
         timestamp = datetime.fromisoformat(metadata['metadata']['timestamp'])
     except Exception:
+        upload_session.update_fail_info('hash', 'Invalid timestamp format')
+        db.session.commit()
+        notify_status_change(upload_session)
         return jsonify({'error': 'Invalid timestamp format'}), 400
 
     if (datetime.utcnow() - timestamp).total_seconds() > 1800:
@@ -1211,7 +1227,11 @@ def decrypt_session_key(session_token):
     encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])    
     try:
         session_key = decrypt_with_private_key(encrypted_session_key, key_mapping.private_key_pem)
-    except Exception:
+    except Exception as e:
+        upload_session.update_fail_info('rsa', 'Invalid session key')
+        db.session.commit()
+        notify_status_change(upload_session)
+        print(f"Decryption failed: {str(e)}")
         return jsonify({'error': 'Invalid session key'}), 400
 
     upload_session.cache_session_key(session_key)
@@ -1231,17 +1251,29 @@ def verify_integrity(session_token):
         stored_iv = file_contents[:16]
         encrypted_data = file_contents[16:]
     except Exception:
+        upload_session.update_fail_info('decrypt', 'File read error')
+        db.session.commit()
+        notify_status_change(upload_session)
         return jsonify({'error': 'File read error'}), 400
 
     if stored_iv != iv:
+        upload_session.update_fail_info('decrypt', 'IV mismatch')
+        db.session.commit()
+        notify_status_change(upload_session)
         return jsonify({'error': 'IV mismatch'}), 400
 
     if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
+        upload_session.update_fail_info('decrypt', 'File integrity check failed')
+        db.session.commit()
+        notify_status_change(upload_session)
         return jsonify({'error': 'File integrity check failed'}), 400
 
     try:
         _ = decrypt_file_aes(encrypted_data, session_key, stored_iv)
     except Exception:
+        upload_session.update_fail_info('decrypt', 'Decryption test failed')
+        db.session.commit()
+        notify_status_change(upload_session)
         return jsonify({'error': 'Decryption test failed'}), 400
 
     return jsonify({'message': 'File integrity verified'})

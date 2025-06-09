@@ -18,7 +18,7 @@ class IPUserKeyMapping(db.Model):
 class IPHostKeyMapping(db.Model):
     """Store RSA key pairs for each IP address"""
     id = db.Column(db.Integer, primary_key=True)
-    host_ip = db.Column(db.String(45), unique=True, nullable=False)
+    host_ip = db.Column(db.String(45), nullable=False)
     host_name = db.Column(db.String(100), nullable=False)
     public_key_pem = db.Column(db.Text, nullable=False)
     private_key_pem = db.Column(db.Text, nullable=False)
@@ -44,6 +44,8 @@ class UploadSession(db.Model):
     drive_link = db.Column(db.String(512), nullable=True)
     source_type = db.Column(db.String(10))
     status = db.Column(db.String(20), default='pending')
+    fail_step = db.Column(db.String(50))
+    error_message = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     downloaded_at = db.Column(db.DateTime)
@@ -61,6 +63,17 @@ class UploadSession(db.Model):
             self.updated_at = datetime.utcnow()
             return True
         return False
+
+    def update_fail_info(self, fail_step, error_message):
+        """Update failure information and status"""
+        try:
+            self.fail_step = fail_step
+            self.error_message = error_message
+            self.status = 'failed'
+            self.updated_at = datetime.utcnow()
+            return True
+        except:
+            return False
     
     def cache_session_key(self, session_key):
         """Cache session key temporarily in metadata"""
@@ -112,3 +125,18 @@ class HostJoinRequest(db.Model):
     revoked_at = db.Column(db.DateTime)
 
     host = db.relationship('Host', backref=db.backref('join_requests', lazy=True))
+
+class FileStatus(db.Model):
+    """Store status information for files"""
+    id = db.Column(db.Integer, primary_key=True)
+    session_token = db.Column(db.String(64), db.ForeignKey('upload_session.session_token'), nullable=False)
+    status = db.Column(db.String(20), default='pending')  # pending, processing, completed, failed
+    failed_step = db.Column(db.String(50))  # Step where failure occurred (if status is failed)
+    error_message = db.Column(db.Text)  # Error description (if status is failed)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    upload_session = db.relationship('UploadSession', backref=db.backref('file_statuses', lazy=True))
+
+    def __repr__(self):
+        return f'<FileStatus {self.session_token} - {self.status}>'
