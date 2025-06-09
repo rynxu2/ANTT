@@ -500,8 +500,8 @@ class RealtimeClient {
         setTimeout(() => {
             row.classList.remove('highlight', highlightClass);
         }, 2000);
-    }
-
+    }    
+    
     handleNewFile(data) {
         if (window.location.pathname.includes('/receiver_files')) {
             const fileKey = `${data.session_token}-${data.created_at}`;
@@ -540,7 +540,8 @@ class RealtimeClient {
 
             const tbody = table.querySelector('tbody');
             if (tbody) {
-                const tr = this.createFileRow(data);
+                const tr = document.createElement('tr');
+                
                 tbody.insertBefore(tr, tbody.firstChild);
             }
 
@@ -630,14 +631,12 @@ class RealtimeClient {
                             data-bs-title="Upload to Drive" disabled>
                         <i class="fas fa-google-drive"></i>
                     </button>    
-                    <form class="d-inline mark-failed-form" action="/mark_file_failed/${data.id}" method="POST">
-                        <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]').getAttribute('content')}">
-                        <button type="submit" class="btn btn-sm btn-danger mark-failed-btn"
-                                data-bs-toggle="tooltip"
-                                data-bs-title="Mark as Failed">
-                            <i class="fas fa-times-circle"></i>
-                        </button>
-                    </form>
+                    <button type="button" class="btn btn-sm btn-info verification-details-btn"
+                            data-session-token="${data.session_token}"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="View Verification Details">
+                        <i class="fas fa-info-circle"></i>
+                    </button>
                 </div>
             </td>
         `;

@@ -7,7 +7,7 @@ from datetime import datetime
 from flask import request, render_template, jsonify, session, flash, redirect, url_for, send_file
 from werkzeug.utils import secure_filename
 from app import app, db
-from models import IPKeyMapping, UploadSession, Host, HostJoinRequest
+from models import IPUserKeyMapping, IPHostKeyMapping, UploadSession, Host, HostJoinRequest
 from crypto_utils import (
     generate_rsa_keypair, 
     encrypt_with_public_key, 
@@ -67,13 +67,13 @@ def get_client_ip():
 def ensure_sender_keys():
     """Ensure the current IP has RSA keys, create if not exists"""
     client_ip = get_client_ip()
-    ip_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
+    ip_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
     
     if not ip_mapping:
         try:
             public_key_pem, private_key_pem = generate_rsa_keypair()
             
-            new_mapping = IPKeyMapping(
+            new_mapping = IPUserKeyMapping(
                 ip_address=client_ip,
                 public_key_pem=public_key_pem,
                 private_key_pem=private_key_pem
@@ -142,37 +142,35 @@ def sender_dashboard():
 
 @app.route('/generate_keys', methods=['POST'])
 def generate_keys():
-    """Generate RSA key pair for the client IP"""
+    """Force-generate a new RSA key pair for the client IP, replacing any existing ones"""
     client_ip = get_client_ip()
-    
+
     try:
-        existing_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
+        existing_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
         if existing_mapping:
-            return jsonify({
-                'success': True,
-                'message': 'Keys already exist for this IP',
-                'public_key': existing_mapping.public_key_pem
-            })
-        
+            db.session.delete(existing_mapping)
+            db.session.commit()
+
         public_key_pem, private_key_pem = generate_rsa_keypair()
-        
-        new_mapping = IPKeyMapping(
+
+        new_mapping = IPUserKeyMapping(
             ip_address=client_ip,
             public_key_pem=public_key_pem,
-            private_key_pem=private_key_pem
+            private_key_pem=private_key_pem,
+            created_at=datetime.utcnow(),
         )
-        
+
         db.session.add(new_mapping)
         db.session.commit()
-        
-        app.logger.info(f"Generated RSA keys for IP: {client_ip}")
-        
+
+        app.logger.info(f"Re-generated RSA keys for IP: {client_ip}")
+
         return jsonify({
             'success': True,
-            'message': 'RSA key pair generated successfully',
+            'message': 'New RSA key pair generated successfully',
             'public_key': public_key_pem
         })
-        
+
     except Exception as e:
         app.logger.error(f"Error generating keys for IP {client_ip}: {str(e)}")
         return jsonify({
@@ -192,28 +190,29 @@ def view_sessions():
 def receiver_hosts():
     """List all hosts"""
     client_ip = get_client_ip()
-    hosts = Host.query.all()
+    hosts = Host.query.filter_by(ip_address=client_ip).all()
     return render_template('hosts.html', hosts=hosts, client_ip=client_ip)
 
 @app.route('/hosts/add', methods=['POST'])
 def add_host():
     """Add a new host"""
-    client_ip = get_client_ip()
+    host_ip = get_client_ip()
     name = request.form.get('name')
     description = request.form.get('description')
     
-    existing_host = Host.query.filter_by(created_by=client_ip, name=name).first()
+    existing_host = Host.query.filter_by(created_by=host_ip, name=name).first()
     if existing_host:
         flash('A host with this name already exists for your IP', 'error')
         return redirect(url_for('receiver_hosts'))
     
-    ip_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
+    ip_mapping = IPHostKeyMapping.query.filter_by(host_ip=host_ip).first()
     if not ip_mapping:
         try:
             public_key_pem, private_key_pem = generate_rsa_keypair()
             
-            ip_mapping = IPKeyMapping(
-                ip_address=client_ip,
+            ip_mapping = IPHostKeyMapping(
+                host_ip=host_ip,
+                host_name=name,
                 public_key_pem=public_key_pem,
                 private_key_pem=private_key_pem
             )
@@ -227,10 +226,10 @@ def add_host():
     
     new_host = Host(
         name=name,
-        ip_address=client_ip,
+        ip_address=host_ip,
         description=description,
         public_key=ip_mapping.public_key_pem,
-        created_by=client_ip
+        created_by=host_ip
     )
     
     try:
@@ -275,17 +274,17 @@ def sender_select_host():
     client_ip = get_client_ip()
     hosts = Host.query.all()
     
-    # Lấy các yêu cầu tham gia host của người dùng hiện tại
     host_requests = {}
     join_requests = HostJoinRequest.query.filter_by(
         sender_ip=client_ip
     ).order_by(HostJoinRequest.created_at.desc()).all()
     
-    # Tạo dictionary chứa status yêu cầu cho mỗi host
     for request in join_requests:
-        # Chỉ lưu request mới nhất cho mỗi host
         if request.host_id not in host_requests:
-            host_requests[request.host_id] = {
+            host_requests[request.host_id] = {}
+            
+        if request.host_name not in host_requests[request.host_id]:
+            host_requests[request.host_id][request.host_name] = {
                 'status': request.status,
                 'created_at': request.created_at,
                 'approved_at': request.approved_at,
@@ -294,7 +293,7 @@ def sender_select_host():
                 'message': request.message,
                 'response_message': request.response_message
             }
-    
+    print(f"Host requests: {hosts}")
     return render_template('select_host.html', 
                          hosts=hosts,
                          host_requests=host_requests)
@@ -326,6 +325,7 @@ def receiver_files():
     hosts = Host.query.filter_by(created_by=client_ip).all()
     
     selected_host_id = request.args.get('host_id', type=int)
+
     if selected_host_id:
         selected_host = Host.query.get_or_404(selected_host_id)
         if selected_host.created_by != client_ip:
@@ -333,7 +333,8 @@ def receiver_files():
             return redirect(url_for('receiver_files'))
         
         received_files = UploadSession.query.filter_by(
-            receiver_ip=selected_host.ip_address
+            receiver_ip=selected_host.ip_address,
+            receiver_name=selected_host.name
         ).order_by(UploadSession.created_at.desc()).all()
     else:
         host_ips = [host.ip_address for host in hosts]
@@ -396,6 +397,7 @@ def upload_file():
         existing_file = UploadSession.query.filter_by(
             sender_ip=sender_ip,
             receiver_ip=host.ip_address,
+            receiver_name=host.name,
             status=FILE_STATUS['PENDING']
         ).order_by(UploadSession.created_at.desc()).first()
     except Exception as e:
@@ -415,7 +417,7 @@ def upload_file():
     encrypted_path = None
 
     try:
-        sender_keys = IPKeyMapping.query.filter_by(ip_address=sender_ip).first()
+        sender_keys = IPUserKeyMapping.query.filter_by(ip_address=sender_ip).first()
         if not sender_keys:
             app.logger.error(f"No keys found for sender IP {sender_ip}")
             raise Exception("Sender keys not found")
@@ -476,6 +478,7 @@ def upload_file():
         upload_session = UploadSession(
             sender_ip=sender_ip,
             receiver_ip=host.ip_address,
+            receiver_name=host.name,
             session_token=session_token,
             filename=file.filename,
             file_hash=secured_hash,
@@ -566,7 +569,10 @@ def download_file(session_token):
             return jsonify({'error': 'File not verified'}), 400
         
         client_ip = get_client_ip()
-        key_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
+        key_mapping = IPHostKeyMapping.query.filter_by(
+            host_ip=client_ip, 
+            host_name=upload_session.receiver_name
+        ).first()
         if not key_mapping:
             return jsonify({'error': 'Recipient keys not found'}), 404
         
@@ -657,7 +663,7 @@ def sender_secure_upload():
         return redirect(url_for('sender_select_host'))
     
     client_ip = get_client_ip()
-    if not IPKeyMapping.query.filter_by(ip_address=client_ip).first():
+    if not IPUserKeyMapping.query.filter_by(ip_address=client_ip).first():
         if not ensure_sender_keys():
             flash('Failed to generate sender keys.', 'error')
             return redirect(url_for('sender_dashboard'))
@@ -682,12 +688,12 @@ def verify_file(session_token):
         return jsonify({'error': 'Unauthorized'}), 403
 
     try:
-        key_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
+        key_mapping = IPHostKeyMapping.query.filter_by(host_ip=client_ip, host_name=upload_session.receiver_name).first()
         if not key_mapping:
             app.logger.error(f"Recipient keys not found for IP: {client_ip}")
             return jsonify({'error': 'Recipient keys not found'}), 404
 
-        sender_keys = IPKeyMapping.query.filter_by(ip_address=upload_session.sender_ip).first()
+        sender_keys = IPUserKeyMapping.query.filter_by(ip_address=upload_session.sender_ip).first()
         if not sender_keys:
             app.logger.error(f"Sender keys not found for IP: {upload_session.sender_ip}")
             return jsonify({'error': 'Sender keys not found'}), 404
@@ -861,19 +867,19 @@ def request_join_host(host_id):
     """Send a request to join a host"""
     if not request.form.get('csrf_token'):
         return jsonify({'error': 'CSRF token missing'}), 400
-    print(1)
+
     client_ip = get_client_ip()
     host = Host.query.get_or_404(host_id)
-    print(2)
+
     existing_request = HostJoinRequest.query.filter_by(
         host_id=host_id,
+        host_name=host.name,
         sender_ip=client_ip
     ).first()
-    print(3)
+
     if existing_request:
         if existing_request.status == 'pending':
             flash('You already have a pending request for this host.', 'warning')
-            print(4)
             return redirect(url_for('sender_select_host'))
 
         elif existing_request.status in ['rejected', 'revoked']:
@@ -883,31 +889,28 @@ def request_join_host(host_id):
             existing_request.rejected_at = None
             existing_request.revoked_at = None
             existing_request.response_message = None
-            print(5)
             db.session.commit()
-            print(6)
+            
             flash('Your previous request was reset to pending.', 'info')
             notify_new_join_request(existing_request)
-            print(7)
+
             return redirect(url_for('sender_select_host'))
             
     else:
         join_request = HostJoinRequest(
             host_id=host_id,
+            host_name=host.name,
             sender_ip=client_ip,
             host_owner_ip=host.created_by,
             message=f"Hello! {client_ip}",
             status='pending',
             created_at=datetime.utcnow()
         )
-        print(8)
         db.session.add(join_request)
-        print(9)
         db.session.commit()
-        print(10)
     
     notify_new_join_request(join_request)
-    print(11)
+
     flash('Join request sent successfully.', 'success')
     return redirect(url_for('sender_select_host'))
 
@@ -988,11 +991,26 @@ def revoke_host_access(host_id):
 def sender_key_management():
     """Key management page for senders"""
     client_ip = get_client_ip()
-    ip_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
+    ip_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
+    
+    if not ip_mapping:
+        try:
+            public_key_pem, private_key_pem = generate_rsa_keypair()
+            ip_mapping = IPUserKeyMapping(
+                ip_address=client_ip,
+                public_key_pem=public_key_pem,
+                private_key_pem=private_key_pem
+            )
+            db.session.add(ip_mapping)
+            db.session.commit()
+            flash('RSA keys generated successfully', 'success')
+        except Exception as e:
+            flash(f'Error generating RSA keys: {str(e)}', 'error')
+            return redirect(url_for('sender_dashboard'))
     
     has_keys = ip_mapping is not None
-    public_key = ip_mapping.public_key_pem if ip_mapping else None
-    private_key = ip_mapping.private_key_pem if ip_mapping else None
+    public_key = ip_mapping.public_key_pem
+    private_key = ip_mapping.private_key_pem
     
     return render_template('key_management.html',
                          has_keys=has_keys,
@@ -1027,7 +1045,7 @@ def get_file_metadata(session_token):
             'iv': metadata['iv'],
             'file_hash': upload_session.file_hash,
             'signature': metadata['metadata_signature'],
-            'sender_key': IPKeyMapping.query.filter_by(
+            'sender_key': IPUserKeyMapping.query.filter_by(
                 ip_address=upload_session.sender_ip
             ).first().public_key_pem
         }
@@ -1055,7 +1073,7 @@ def upload_to_drive():
             return jsonify({'error': 'File must be verified before uploading to Drive'}), 400
         
         client_ip = get_client_ip()
-        key_mapping = IPKeyMapping.query.filter_by(ip_address=client_ip).first()
+        key_mapping = IPHostKeyMapping.query.filter_by(host_ip=client_ip).first()
         if not key_mapping:
             return jsonify({'error': 'Recipient keys not found'}), 404
         
@@ -1067,7 +1085,7 @@ def upload_to_drive():
             encrypted_session_key,
             key_mapping.private_key_pem
         )
-        
+        print(f"Session key decrypted successfully for upload to Drive: {upload_session.filepath}")
         with open(upload_session.filepath, 'rb') as f:
             file_contents = f.read()
             
@@ -1093,7 +1111,7 @@ def upload_to_drive():
             
             app.logger.info(f"Decrypted file created at: {temp_decrypted_path}")
             
-            drive_result = drive_manager.upload_file(temp_decrypted_path)
+            drive_result = drive_manager.upload_file(temp_decrypted_path, upload_session.receiver_name)
             if not drive_result:
                 raise Exception('Failed to upload to Drive')
 
@@ -1135,79 +1153,106 @@ def upload_to_drive():
         app.logger.error(f"Drive upload error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/drive/download/<file_id>', methods=['GET'])
-def download_from_drive(file_id):
-    """Download a file from Google Drive to secure storage"""
-    upload_session = UploadSession.query.filter_by(id=file_id).first()
-    
-    if not upload_session or not upload_session.drive_file_id:
-        return jsonify({'error': 'File not found in Drive'}), 404
-        
-    try:
-        # Generate secure local path
-        local_path = os.path.join(
-            UPLOAD_FOLDER,
-            datetime.now().strftime('%Y'),
-            datetime.now().strftime('%m'),
-            f"drive_{upload_session.filename}"
-        )
-        
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        
-        # Download from Drive
-        if drive_manager.download_file(upload_session.drive_file_id, local_path):
-            # Update database
-            upload_session.filepath = local_path
-            upload_session.source_type = 'local'
-            db.session.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'File downloaded successfully'
-            })
-        else:
-            return jsonify({'error': 'Failed to download from Drive'}), 500
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/drive/pick-file', methods=['POST'])
-def pick_drive_file():
-    """Handle file selection from Google Drive Picker"""
-    data = request.get_json()
-    if 'fileId' not in data:
-        return jsonify({'error': 'No file selected'}), 400
-        
-    file_id = data['fileId']
-    
-    try:
-        # Get file metadata from Drive
-        file = drive_manager.service.files().get(
-            fileId=file_id,
-            fields='id, name, size, webViewLink'
-        ).execute()
-        
-        # Store the Drive file info in session for upload
-        session['selected_drive_file'] = {
-            'id': file['id'],
-            'name': file['name'],
-            'size': file.get('size'),
-            'link': file['webViewLink']
-        }
-        
-        return jsonify({
-            'success': True,
-            'file': {
-                'name': file['name'],
-                'size': file.get('size')
-            }
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/oauth2callback')
 def oauth2callback():
     """Handle Google OAuth2 callback"""
     return render_template('oauth2callback.html')
+
+@app.route('/verify/<session_token>/ip', methods=['POST'])
+def verify_ip(session_token):
+    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+    if not upload_session:
+        return jsonify({'error': 'Invalid session token'}), 404
+
+    client_ip = get_client_ip()
+    if upload_session.receiver_ip != client_ip:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    return jsonify({'message': 'IP verified successfully'})
+
+@app.route('/verify/<session_token>/signature', methods=['POST'])
+def verify_signature_route(session_token):
+    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+    sender_keys = IPUserKeyMapping.query.filter_by(ip_address=upload_session.sender_ip).first()
+    metadata = upload_session.get_metadata()
+    metadata_signature = base64.b64decode(metadata['metadata_signature'])
+    is_valid = verify_signature(
+        json.dumps(metadata['metadata']).encode('utf-8'),
+        metadata_signature,
+        sender_keys.public_key_pem
+    )
+    if not is_valid:
+        return jsonify({'error': 'Invalid signature'}), 400
+    return jsonify({'message': 'Signature verified'})
+
+@app.route('/verify/<session_token>/metadata', methods=['POST'])
+def verify_metadata(session_token):
+    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+    metadata = upload_session.get_metadata()
+
+    if metadata['metadata']['sender_ip'] != upload_session.sender_ip:
+        return jsonify({'error': 'Sender IP mismatch'}), 400
+
+    try:
+        timestamp = datetime.fromisoformat(metadata['metadata']['timestamp'])
+    except Exception:
+        return jsonify({'error': 'Invalid timestamp format'}), 400
+
+    if (datetime.utcnow() - timestamp).total_seconds() > 1800:
+        return jsonify({'error': 'Request expired'}), 400
+
+    return jsonify({'message': 'Metadata verified'})
+
+@app.route('/verify/<session_token>/session-key', methods=['POST'])
+def decrypt_session_key(session_token):
+    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+    key_mapping = IPHostKeyMapping.query.filter_by(host_ip=get_client_ip(), host_name=upload_session.receiver_name).first()
+    metadata = upload_session.get_metadata()
+    encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])    
+    try:
+        session_key = decrypt_with_private_key(encrypted_session_key, key_mapping.private_key_pem)
+    except Exception:
+        return jsonify({'error': 'Invalid session key'}), 400
+
+    upload_session.cache_session_key(session_key)
+    db.session.commit()
+    return jsonify({'message': 'Session key decrypted'})
+
+@app.route('/verify/<session_token>/integrity', methods=['POST'])
+def verify_integrity(session_token):
+    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+    session_key = upload_session.get_cached_session_key()
+    metadata = upload_session.get_metadata()
+
+    try:
+        iv = base64.b64decode(metadata['iv'])
+        with open(upload_session.filepath, 'rb') as f:
+            file_contents = f.read()
+        stored_iv = file_contents[:16]
+        encrypted_data = file_contents[16:]
+    except Exception:
+        return jsonify({'error': 'File read error'}), 400
+
+    if stored_iv != iv:
+        return jsonify({'error': 'IV mismatch'}), 400
+
+    if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
+        return jsonify({'error': 'File integrity check failed'}), 400
+
+    try:
+        _ = decrypt_file_aes(encrypted_data, session_key, stored_iv)
+    except Exception:
+        return jsonify({'error': 'Decryption test failed'}), 400
+
+    return jsonify({'message': 'File integrity verified'})
+
+@app.route('/verify/<session_token>/complete', methods=['POST'])
+def complete_verification(session_token):
+    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+    try:
+        upload_session.update_status(FILE_STATUS['VERIFIED'])
+        db.session.commit()
+        notify_status_change(upload_session)
+        return jsonify({'message': 'File verified and completed'})
+    except Exception as e:
+        return jsonify({'error': f'Database error: {str(e)}'}), 500

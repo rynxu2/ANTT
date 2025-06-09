@@ -876,3 +876,199 @@ details[open] summary::before {
     pointer-events: none;
     opacity: 0.7;
 }
+
+.stat-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.stat-icon {
+    width: 45px;
+    height: 45px;
+    border-radius: 10px;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+    background: #e9ecef;
+}
+
+.stat-icon i {
+    font-size: 1.2rem;
+    color: #0d6efd;
+}
+
+.stat-info {
+    flex-grow: 1;
+}
+
+.stat-info h6 {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.stat-info strong {
+    display: block;
+    font-size: 1.05rem;
+    color: #212529;
+    margin-top: 3px;
+    transition: color 0.2s ease;
+}
+
+.stat-card:hover .stat-info strong {
+    color: #0d6efd;
+}
+
+/* Filter select styling */
+.form-select {
+    border-radius: 8px;
+    border: 2px solid #e9ecef;
+    padding: 0.5rem 1rem;
+    transition: border-color 0.2s ease;
+}
+
+.form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.1);
+}
+
+/* Loading animation */
+.loading-overlay {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(4px);
+    transition: opacity 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.stat-card {
+    animation: fadeIn 0.3s ease;
+}
+
+.verification-step {
+    position: relative;
+    opacity: 0.5;
+    transition: all 0.3s ease;
+}
+
+.verification-step.active {
+    opacity: 1;
+}
+
+.verification-step.completed {
+    opacity: 1;
+}
+
+.verification-step.error {
+    opacity: 1;
+}
+
+.step-circle {
+    position: relative;
+    width: 40px;
+    height: 40px;
+}
+
+.step-progress {
+    position: relative;
+    width: 40px;
+    height: 40px;
+}
+
+.progress-ring {
+    transform: rotate(-90deg);
+}
+
+.progress-ring-bar {
+    transition: stroke-dashoffset 1s ease-in-out;
+}
+
+.step-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+}
+
+.step-waiting {
+    color: #6c757d;
+}
+
+.step-success {
+    color: #198754;
+}
+
+.step-error {
+    color: #dc3545;
+}
+
+.step-title {
+    font-weight: 600;
+    color: #212529;
+}
+
+.step-description {
+    font-size: 0.875rem;
+}
+
+.step-details {
+    font-size: 0.75rem;
+}
+
+/* Animation for progress ring */
+@keyframes progress-animation {
+    from {
+        stroke-dashoffset: 100;
+    }
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+.verification-step.active .progress-ring-bar {
+    stroke: #0d6efd;
+    animation: progress-animation 2s ease-in-out forwards;
+}
+
+.verification-step.completed .progress-ring-bar {
+    stroke: #198754;
+    stroke-dashoffset: 0;
+}
+
+.verification-step.error .progress-ring-bar {
+    stroke: #dc3545;
+    stroke-dashoffset: 0;
+}
+
+/* Summary styles */
+.summary-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+}
+
+.verification-summary {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+}

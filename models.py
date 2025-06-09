@@ -1,8 +1,9 @@
 from app import db
 from datetime import datetime
 import json
+import base64
 
-class IPKeyMapping(db.Model):
+class IPUserKeyMapping(db.Model):
     """Store RSA key pairs for each IP address"""
     id = db.Column(db.Integer, primary_key=True)
     ip_address = db.Column(db.String(45), unique=True, nullable=False)
@@ -14,11 +15,25 @@ class IPKeyMapping(db.Model):
     def __repr__(self):
         return f'<IPKeyMapping {self.ip_address}>'
 
+class IPHostKeyMapping(db.Model):
+    """Store RSA key pairs for each IP address"""
+    id = db.Column(db.Integer, primary_key=True)
+    host_ip = db.Column(db.String(45), unique=True, nullable=False)
+    host_name = db.Column(db.String(100), nullable=False)
+    public_key_pem = db.Column(db.Text, nullable=False)
+    private_key_pem = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_used = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<IPKeyMapping {self.host_ip} - ({self.host_name})>'
+
 class UploadSession(db.Model):
     """Track file upload sessions"""
     id = db.Column(db.Integer, primary_key=True)
     sender_ip = db.Column(db.String(45), nullable=False)
     receiver_ip = db.Column(db.String(45), nullable=False)
+    receiver_name = db.Column(db.String(100), nullable=False)
     session_token = db.Column(db.String(64), unique=True, nullable=False)
     filename = db.Column(db.String(255))
     file_hash = db.Column(db.String(128))
@@ -46,6 +61,19 @@ class UploadSession(db.Model):
             self.updated_at = datetime.utcnow()
             return True
         return False
+    
+    def cache_session_key(self, session_key):
+        """Cache session key temporarily in metadata"""
+        metadata = self.get_metadata()
+        metadata['cached_session_key'] = base64.b64encode(session_key).decode('utf-8')
+        self.set_metadata(metadata)
+
+    def get_cached_session_key(self):
+        """Get cached session key from metadata"""
+        metadata = self.get_metadata()
+        if 'cached_session_key' not in metadata:
+            raise Exception('No cached session key found')
+        return base64.b64decode(metadata['cached_session_key'].encode('utf-8'))
         
     def __repr__(self):
         return f'<UploadSession {self.session_token}>'
@@ -54,11 +82,16 @@ class Host(db.Model):
     """Store information about recipient hosts"""
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    ip_address = db.Column(db.String(45), unique=True, nullable=False)
+    ip_address = db.Column(db.String(45), nullable=False)
     description = db.Column(db.Text)
     public_key = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.String(45))
+    
+    # Add unique constraint on name and ip_address combination
+    __table_args__ = (
+        db.UniqueConstraint('name', 'ip_address', name='uix_host_name_ip'),
+    )
     
     def __repr__(self):
         return f'<Host {self.name} ({self.ip_address})>'
@@ -67,15 +100,15 @@ class HostJoinRequest(db.Model):
     """Model for host join requests"""
     id = db.Column(db.Integer, primary_key=True)
     host_id = db.Column(db.Integer, db.ForeignKey('host.id'), nullable=False)
+    host_name = db.Column(db.String(100), nullable=False)
     sender_ip = db.Column(db.String(45), nullable=False)
     host_owner_ip = db.Column(db.String(45), nullable=False)
     message = db.Column(db.String(255))
     response_message = db.Column(db.String(255))
-    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected, revoked
+    status = db.Column(db.String(20), default='pending')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     approved_at = db.Column(db.DateTime)
     rejected_at = db.Column(db.DateTime)
     revoked_at = db.Column(db.DateTime)
 
-    # Relationships
     host = db.relationship('Host', backref=db.backref('join_requests', lazy=True))

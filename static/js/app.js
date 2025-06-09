@@ -81,7 +81,7 @@ class SecureUploadClient {
                 
                 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
                 
-                const response = await fetch('/', {
+                const response = await fetch('/upload', {
                     method: 'POST',
                     headers: {
                         'X-CSRFToken': csrfToken

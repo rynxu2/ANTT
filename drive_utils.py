@@ -36,35 +36,6 @@ class DriveManager:
 
         self.service = build('drive', 'v3', credentials=self.credentials)
 
-    def upload_file(self, file_path, folder_id=None):
-        try:
-            file_metadata = {
-                'name': os.path.basename(file_path)
-            }
-            if folder_id:
-                file_metadata['parents'] = [folder_id]
-
-            media = MediaFileUpload(
-                file_path, 
-                resumable=True,
-                chunksize=1024*1024
-            )
-
-            file = self.service.files().create(
-                body=file_metadata,
-                media_body=media,
-                fields='id, webViewLink'
-            ).execute()
-
-            return {
-                'file_id': file.get('id'),
-                'web_link': file.get('webViewLink')
-            }
-
-        except HttpError as error:
-            print(f'An error occurred: {error}')
-            return None
-
     def download_file(self, file_id, destination_path):
         try:
             request = self.service.files().get_media(fileId=file_id)
@@ -105,6 +76,77 @@ class DriveManager:
                 fields='webViewLink'
             ).execute()
             return file.get('webViewLink')
+        except HttpError as error:
+            print(f'An error occurred: {error}')
+            return None
+
+    def make_file_public(self, file_id):
+        try:
+            permission = {
+                'type': 'anyone',
+                'role': 'reader'
+            }
+            self.service.permissions().create(
+                fileId=file_id,
+                body=permission
+            ).execute()
+            return True
+        except HttpError as error:
+            print(f'An error occurred: {error}')
+            return False
+
+    def get_or_create_host_folder(self, host_name):
+        try:
+            query = f"name='{host_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            results = self.service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name)'
+            ).execute()
+            items = results.get('files', [])
+
+            if items:
+                return items[0]['id']
+            else:
+                folder_id = self.create_folder(host_name)
+                if folder_id:
+                    self.make_file_public(folder_id)
+                return folder_id
+
+        except HttpError as error:
+            print(f'An error occurred: {error}')
+            return None
+
+    def upload_file(self, file_path, host_name):
+        try:
+            folder_id = self.get_or_create_host_folder(host_name)
+            if not folder_id:
+                return None
+
+            file_metadata = {
+                'name': os.path.basename(file_path),
+                'parents': [folder_id]
+            }
+
+            media = MediaFileUpload(
+                file_path, 
+                resumable=True,
+                chunksize=1024*1024
+            )
+
+            file = self.service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id, webViewLink'
+            ).execute()
+
+            self.make_file_public(file.get('id'))
+
+            return {
+                'file_id': file.get('id'),
+                'web_link': file.get('webViewLink')
+            }
+
         except HttpError as error:
             print(f'An error occurred: {error}')
             return None
