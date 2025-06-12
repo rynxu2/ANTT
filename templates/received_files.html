@@ -104,38 +104,14 @@
                         </div>
                     </div>
                 </div>
-                
-                <!-- Files List -->
+
+                <!-- Received Files Table -->
                 {% if received_files %}
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="d-flex gap-2">
-                            <button id="batch-verify-btn" class="btn btn-success" disabled>
-                                <i class="fas fa-check me-1"></i> Verify Selected
-                            </button>
-                            <button id="batch-download-btn" class="btn btn-primary" disabled>
-                                <i class="fas fa-download me-1"></i> Download Selected
-                            </button>
-                            <button id="batch-drive-btn" class="btn btn-primary" disabled>
-                                <i class="fab fa-google-drive me-1"></i> Upload Selected to Drive
-                            </button>
-                        </div>
-                        <div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="select-all-files">
-                                <label class="form-check-label" for="select-all-files">Select All</label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <div class="table-responsive">
                     <table id="table-received-files" class="table table-hover align-middle mb-0">
                         <thead>
                             <tr>
-                                <th style="width: 5%">
-                                    <div class="text-center">#</div>
-                                </th>
-                                <th style="width: 30%">File Name</th>
+                                <th style="width: 35%">File Name</th>
                                 <th style="width: 20%">Sender</th>
                                 <th style="width: 15%">Size</th>
                                 <th style="width: 15%">Status</th>
@@ -145,12 +121,6 @@
                         <tbody>
                             {% for file in received_files %}
                             <tr data-session-token="{{ file.session_token }}" data-file-id="{{ file.id }}">
-                                <td class="text-center">
-                                    <input class="form-check-input file-checkbox" type="checkbox" 
-                                           data-status="{{ file.status }}"
-                                           data-session-token="{{ file.session_token }}"
-                                           data-file-id="{{ file.id }}">
-                                </td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="file-icon me-3">
@@ -519,7 +489,7 @@
 {% block scripts %}
 <script>
 const CONFIG = {
-    STEP_DELAY: 400,
+    STEP_DELAY: 700,
     SUCCESS_HIDE_DELAY: 3000,
     VERIFICATION_STEPS: [
         { id: 'step-ip', name: 'IP Verification', endpoint: 'ip' },
@@ -814,29 +784,43 @@ class VerificationModal {
         } finally {
             document.getElementById('proceedVerifyBtn').disabled = false;
         }
-    }
-
+    }    
+    
     toggleVerifyButtons({ sessionToken = null, fileId = null }) {
         const selector = sessionToken
-            ? `[data-session-token="${sessionToken}"]`
-            : `[data-file-id="${fileId}"]`;
+            ? `button[data-session-token="${sessionToken}"]`
+            : `button[data-file-id="${fileId}"]`;
 
-        const verifyBtn = document.querySelector(`.verify-btn${selector}`);
+        const verifyBtn = document.querySelector(`${selector}.verify-btn`);
+        
+        if (!verifyBtn) {
+            console.warn('Verify button not found for', { sessionToken, fileId });
+            return;
+        }
 
+        // Update button classes
         verifyBtn.classList.remove('btn-success', 'verify-btn');
         verifyBtn.classList.add('btn-info', 'verify-details-btn');
 
+        // Update tooltips
         verifyBtn.setAttribute('data-bs-title', 'View Verification Details');
         verifyBtn.setAttribute('title', 'View Verification Details');
+        verifyBtn.setAttribute('data-session-token', sessionToken);
+        verifyBtn.setAttribute('data-file-id', fileId);
 
+        // Update icon if present
         const icon = verifyBtn.querySelector('i');
         if (icon) {
             icon.classList.remove('fa-check');
             icon.classList.add('fa-shield-alt');
         }
 
-        if (bootstrap && bootstrap.Tooltip) {
-            bootstrap.Tooltip.getInstance(verifyBtn)?.dispose();
+        // Handle tooltip instance
+        const existingTooltip = bootstrap?.Tooltip?.getInstance(verifyBtn);
+        if (existingTooltip) {
+            existingTooltip.dispose();
+        }
+        if (bootstrap?.Tooltip) {
             new bootstrap.Tooltip(verifyBtn);
         }
     }
@@ -846,9 +830,7 @@ class VerificationModal {
             window.location.href = `/download/${this.currentSessionToken}`;
             this.hide();
         }
-    }
-
-    async uploadToDrive(event) {
+    }    async uploadToDrive(event) {
         if (!this.currentFileId) {
             Utils.showAlert('error', 'No file selected');
             return;
@@ -856,6 +838,7 @@ class VerificationModal {
 
         const driveBtn = event.currentTarget;
         const originalHTML = driveBtn.innerHTML;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         
         try {
             driveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -863,13 +846,53 @@ class VerificationModal {
             
             const result = await Utils.fetchWithError('/drive/upload', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': csrfToken
+                },  
                 body: `file_id=${this.currentFileId}`
             });
             
-            Utils.showAlert('success', 'File uploaded to Drive successfully!');
-            
-            if (result.drive_link) {
+            // Handle Google Drive authentication requirement
+            if (result.auth_required) {
+                // Open popup for authentication
+                const width = 600;
+                const height = 600;
+                const left = (screen.width / 2) - (width / 2);
+                const top = (screen.height / 2) - (height / 2);
+                
+                const authWindow = window.open(
+                    '/oauth2callback', 
+                    'Google Drive Authentication',
+                    `width=${width},height=${height},left=${left},top=${top}`
+                );
+                
+                // Wait for authentication to complete
+                await new Promise((resolve, reject) => {
+                    window.addEventListener('message', async (event) => {
+                        if (event.origin === window.location.origin && event.data.type === 'oauth-complete') {
+                            authWindow.close();
+                            resolve();
+                        }
+                    });
+                });
+                
+                // Retry upload after authentication
+                const retryResult = await Utils.fetchWithError('/drive/upload', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': Utils.getCSRFToken() 
+                    },  
+                    body: `file_id=${this.currentFileId}`
+                });
+                
+                if (retryResult.drive_link) {
+                    Utils.showAlert('success', 'File uploaded to Drive successfully!');
+                    window.open(retryResult.drive_link, '_blank');
+                }
+            } else if (result.drive_link) {
+                Utils.showAlert('success', 'File uploaded to Drive successfully!');
                 window.open(result.drive_link, '_blank');
             }
         } catch (error) {
@@ -931,8 +954,9 @@ class FileReceiverApp {
 
         if (target.classList.contains('verify-details-btn')) {
             const sessionToken = target.dataset.sessionToken;
+            const fileId = target.dataset.fileId;
 
-            this.modal.setCurrentFile(sessionToken, null);
+            this.modal.setCurrentFile(sessionToken, fileId);
             this.modal.loadFileMetadata(sessionToken)
                 .then(metadata => {
                     this.displayVerificationResults(metadata);

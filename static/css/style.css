@@ -54,21 +54,7 @@ body {
     background-color: var(--secondary-color);
 }
 
-.step-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background-color: var(--bs-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 0.5rem;
-    transition: all 0.3s ease;
-}
-
 .upload-step-icon {
-    font-size: 14px;
-    background-color: var(--bs-secondary);
     width: 50px;
     height: 50px;
     border-radius: 50%;
@@ -80,17 +66,17 @@ body {
     transition: all 0.3s ease;
 }
 
-.step-icon i {
+.upload-step-icon i {
     font-size: 1.2rem;
     color: var(--bs-light);
 }
 
-.step.active .step-icon {
+.step.active .upload-step-icon {
     background-color: var(--bs-primary);
     transform: scale(1.1);
 }
 
-.step.completed .step-icon {
+.step.completed .upload-step-icon {
     background-color: var(--bs-success);
 }
 
@@ -213,12 +199,12 @@ body {
         padding: 0.5rem;
     }
     
-    .step-icon {
+    .upload-step-icon {
         width: 40px;
         height: 40px;
     }
     
-    .step-icon i {
+    .upload-step-icon i {
         font-size: 1rem;
     }
     
@@ -1022,6 +1008,7 @@ details[open] summary::before {
     left: 50%;
     transform: translate(-50%, -50%);
     font-size: 14px;
+    background-color: transparent !important;
 }
 
 .step-waiting {

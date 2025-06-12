@@ -8,6 +8,9 @@ from flask import request, render_template, jsonify, session, flash, redirect, u
 from werkzeug.utils import secure_filename
 from app import app, db
 from models import IPUserKeyMapping, IPHostKeyMapping, UploadSession, Host, HostJoinRequest
+from drive_utils import drive_manager, SCOPES
+from google_auth_oauthlib.flow import InstalledAppFlow
+
 from crypto_utils import (
     generate_rsa_keypair, 
     encrypt_with_public_key, 
@@ -38,7 +41,7 @@ from events import (
     notify_access_revoked,
     emit_status_change
 )
-from drive_utils import drive_manager
+
 import io
 import ipaddress
 
@@ -140,52 +143,6 @@ def sender_dashboard():
                          recent_transfers=recent_transfers,
                          stats=stats)
 
-@app.route('/generate_keys', methods=['POST'])
-def generate_keys():
-    """Force-generate a new RSA key pair for the client IP, replacing any existing ones"""
-    client_ip = get_client_ip()
-
-    try:
-        existing_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
-        if existing_mapping:
-            db.session.delete(existing_mapping)
-            db.session.commit()
-
-        public_key_pem, private_key_pem = generate_rsa_keypair()
-
-        new_mapping = IPUserKeyMapping(
-            ip_address=client_ip,
-            public_key_pem=public_key_pem,
-            private_key_pem=private_key_pem,
-            created_at=datetime.utcnow(),
-        )
-
-        db.session.add(new_mapping)
-        db.session.commit()
-
-        app.logger.info(f"Re-generated RSA keys for IP: {client_ip}")
-
-        return jsonify({
-            'success': True,
-            'message': 'New RSA key pair generated successfully',
-            'public_key': public_key_pem
-        })
-
-    except Exception as e:
-        app.logger.error(f"Error generating keys for IP {client_ip}: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Error generating keys: {str(e)}'
-        }), 500
-
-@app.route('/sessions')
-def view_sessions():
-    """View all upload sessions for debugging"""
-    sessions = UploadSession.query.order_by(UploadSession.created_at.desc()).all()
-    return render_template('index.html', 
-                         step='sessions',
-                         sessions=sessions)
-
 @app.route('/receiver_hosts')
 def receiver_hosts():
     """List all hosts"""
@@ -252,12 +209,28 @@ def delete_host(host_id):
     if host.created_by != client_ip:
         flash('You can only delete hosts that you created', 'error')
         return redirect(url_for('receiver_hosts'))
-    
     try:
+        join_requests = HostJoinRequest.query.filter_by(host_id=host_id).all()
+        for request in join_requests:
+            db.session.delete(request)
+        
+        upload_sessions = UploadSession.query.filter_by(
+            receiver_ip=host.ip_address,
+            receiver_name=host.name
+        ).all()
+        
+        for session in upload_sessions:
+            if os.path.exists(session.filepath):
+                try:
+                    os.remove(session.filepath)
+                except Exception as e:
+                    app.logger.error(f"Failed to delete file for session {session.session_token}: {str(e)}")
+            db.session.delete(session)
+        
         db.session.delete(host)
         db.session.commit()
         notify_host_deleted(host_id)
-        flash('Host deleted successfully', 'success')
+        flash('Host, associated join requests and upload sessions deleted successfully', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error deleting host: {str(e)}', 'error')
@@ -272,6 +245,23 @@ def sender_select_host():
         return redirect(url_for('sender_dashboard'))
     
     client_ip = get_client_ip()
+    ip_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
+    
+    if not ip_mapping:
+        try:
+            public_key_pem, private_key_pem = generate_rsa_keypair()
+            ip_mapping = IPUserKeyMapping(
+                ip_address=client_ip,
+                public_key_pem=public_key_pem,
+                private_key_pem=private_key_pem
+            )
+            db.session.add(ip_mapping)
+            db.session.commit()
+            flash('RSA keys generated successfully', 'success')
+        except Exception as e:
+            flash(f'Error generating RSA keys: {str(e)}', 'error')
+            return redirect(url_for('sender_dashboard'))
+        
     hosts = Host.query.all()
     
     host_requests = {}
@@ -293,7 +283,7 @@ def sender_select_host():
                 'message': request.message,
                 'response_message': request.response_message
             }
-    print(f"Host requests: {hosts}")
+
     return render_template('select_host.html', 
                          hosts=hosts,
                          host_requests=host_requests)
@@ -556,7 +546,6 @@ def upload_file():
         except Exception as cleanup_error:
             app.logger.warning(f"Error during temp cleanup: {cleanup_error}")
 
-
 @app.route('/download/<session_token>')
 def download_file(session_token):
     """Handle secure file download"""
@@ -816,28 +805,6 @@ def transfer_status(session_token):
         'updated_at': upload_session.created_at.isoformat()
     })
 
-@app.route('/mark_file_failed/<int:file_id>', methods=['POST'])
-def mark_file_failed(file_id):
-    """Mark a file as failed"""
-    client_ip = get_client_ip()
-    
-    file = UploadSession.query.filter_by(id=file_id).first()
-    if not file:
-        return jsonify({"error": "File not found"}), 404
-    
-    if file.receiver_ip != client_ip:
-        return jsonify({"error": "You are not authorized to mark this file as failed"}), 403
-    
-    file.update_status('failed')
-    db.session.commit()
-    
-    emit_status_change(file)
-    
-    return jsonify({
-        "message": "File marked as failed successfully",
-        "status": "failed"
-    })
-
 @app.route('/receiver_host/approval')
 def receiver_host_approval():
     """Page for managing host join requests"""
@@ -1063,6 +1030,11 @@ def get_file_metadata(session_token):
 def upload_to_drive():
     """Upload a decrypted file from secure storage to Google Drive"""
     try:
+        csrf_token = request.headers.get('X-CSRFToken')
+        if not csrf_token:
+            app.logger.error("CSRF token missing in headers")
+            return jsonify({'error': 'CSRF token missing'}), 400
+    
         if 'file_id' not in request.form:
             return jsonify({'error': 'No file specified'}), 400
         
@@ -1108,13 +1080,22 @@ def upload_to_drive():
         try:
             temp_decrypted_path = os.path.join(TEMP_FOLDER, f"drive_upload_{os.path.basename(upload_session.filepath)}")
             os.makedirs(os.path.dirname(temp_decrypted_path), exist_ok=True)
-            
             with open(temp_decrypted_path, 'wb') as f:
                 f.write(decrypted_data)
-            
             app.logger.info(f"Decrypted file created at: {temp_decrypted_path}")
             
-            drive_result = drive_manager.upload_file(temp_decrypted_path, upload_session.receiver_name)
+            # Check if recipient has Drive credentials
+            if not drive_manager.has_valid_credentials(client_ip):
+                return jsonify({
+                    'error': 'Google Drive authentication required',
+                    'auth_required': True
+                }), 403
+            
+            drive_result = drive_manager.upload_file(
+                temp_decrypted_path, 
+                upload_session.receiver_name,
+                client_ip
+            )
             if not drive_result:
                 raise Exception('Failed to upload to Drive')
 
@@ -1159,7 +1140,51 @@ def upload_to_drive():
 @app.route('/oauth2callback')
 def oauth2callback():
     """Handle Google OAuth2 callback"""
-    return render_template('oauth2callback.html')
+    # Store client IP in session for OAuth flow
+    client_ip = get_client_ip()
+    session['authenticating_user_ip'] = client_ip
+    
+    if request.args.get('code'):
+        # Handle OAuth callback with code
+        try:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'client_secret_326222266772-gj08e0ofpf0ulk5lkjibn5vgto6bvtfo.apps.googleusercontent.com.json',
+                SCOPES
+            )
+            
+            flow.fetch_token(
+                authorization_response=request.url,
+                code=request.args.get('code')
+            )
+            
+            credentials = flow.credentials
+            drive_manager.save_credentials(credentials, client_ip)
+            session.pop('authenticating_user_ip', None)
+            
+            return render_template('oauth2callback.html', success=True)
+            
+        except Exception as e:
+            app.logger.error(f"OAuth callback error: {str(e)}")
+            return render_template('oauth2callback.html', success=False, error=str(e))
+    
+    # Start OAuth flow
+    try:
+        flow = InstalledAppFlow.from_client_secrets_file(
+            'client_secret_326222266772-gj08e0ofpf0ulk5lkjibn5vgto6bvtfo.apps.googleusercontent.com.json',
+            SCOPES,
+            redirect_uri=request.base_url
+        )
+        
+        auth_url, _ = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true'
+        )
+        
+        return redirect(auth_url)
+        
+    except Exception as e:
+        app.logger.error(f"OAuth error: {str(e)}")
+        return render_template('oauth2callback.html', success=False, error=str(e))
 
 @app.route('/verify/<session_token>/ip', methods=['POST'])
 def verify_ip(session_token):

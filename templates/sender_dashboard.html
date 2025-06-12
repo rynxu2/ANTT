@@ -121,7 +121,6 @@
                                     <div class="recipient-ip">{{ transfer.receiver_ip }}</div>
                                 </div>
                             </td>
-                            <td>{{ transfer.file_size | filesizeformat }}</td>
                             <td>
                                 {% if transfer.status == 'verified' %}
                                 <span class="status-badge status-verified">
@@ -145,6 +144,7 @@
                                 </span>
                                 {% endif %}
                             </td>
+                            <td>{{ transfer.file_size | filesizeformat }}</td>
                             <td class="text-end">
                                 <div class="btn-group">
                                     <button class="btn btn-sm btn-light" 

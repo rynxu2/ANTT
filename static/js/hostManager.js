@@ -61,7 +61,7 @@ export class HostManager {
     }
 
     renderHostInSelectView = (data) => {
-        const isSelectHostPage = document.querySelector('.step.active .step-icon i.fas.fa-server');
+        const isSelectHostPage = window.location.pathname.endsWith('/sender_select_host');
         if (!isSelectHostPage) return;
 
         const cardBody = document.querySelector('.card:not(.mb-4) .card-body');
@@ -112,13 +112,11 @@ export class HostManager {
     }
 
     handleHostDeleted = (data) => {
-        const isSelectHostPage = !!document.querySelector('.step.active .step-icon i.fas.fa-server');
+        const isSelectHostPage = !!window.location.pathname.endsWith('/sender_select_host');
 
         if (isSelectHostPage) {
-            const form = document.querySelector(`.card-body form[action="/select_host/${data.id}"]`);
-            const hostCol = form?.closest('.col');
-
-            if (hostCol) hostCol.remove();
+            const form = document.querySelector(`div.col[data-host-id="${data.id}"]`);
+            if (form) form.remove();
 
             const hostGrid = document.querySelector('.row.row-cols-1.row-cols-md-2.row-cols-lg-3.g-4');
 
@@ -132,14 +130,10 @@ export class HostManager {
                             <i class="fas fa-info-circle me-2"></i>
                             No hosts are available for file transfer. Ask your intended recipient to register as a host first.
                         </div>
-                        <img src="static/images/empty-hosts.svg" alt="No hosts" class="img-fluid mb-3" style="max-width: 200px;">
+                        <img src="{{ url_for('static', filename='images/empty-hosts.svg') }}" alt="No hosts" class="img-fluid mb-3" style="max-width: 200px;">
                         <p class="text-muted">
                             To send files, you need a recipient who has registered as a host. Once they register, their host will appear here.
                         </p>
-                        <a href="/sender_dashboard" class="btn btn-outline-primary">
-                            <i class="fas fa-plus me-2"></i>
-                            Manage Hosts
-                        </a>
                     </div>
                 `;
 

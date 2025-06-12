@@ -1,5 +1,4 @@
 import { SocketManager } from './socketManager.js';
-import { NotificationManager } from './notificationManager.js';
 import { HostManager } from './hostManager.js';
 import { FileManager } from './fileManager.js';
 import { RequestManager } from './requestManager.js';
@@ -10,7 +9,6 @@ class RealtimeClient {
         this.socketManager = new SocketManager();
 
         this.socketManager.socket.on('connect', () => {
-            this.notificationManager = new NotificationManager();
             this.hostManager = new HostManager(this.socketManager.socket);
             this.fileManager = new FileManager(this.socketManager.socket);
             this.requestManager = new RequestManager(this.socketManager.socket);

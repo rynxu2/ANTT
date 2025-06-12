@@ -61,12 +61,6 @@
                                 <i class="fas fa-key text-primary me-2"></i>
                                 Key Management
                             </h4>
-                            {% if not has_keys %}
-                            <button id="generateKeysBtn" class="btn btn-primary">
-                                <i class="fas fa-plus-circle me-2"></i>
-                                Generate New Keys
-                            </button>
-                            {% endif %}
                         </div>
                     </div>
                     <div class="card-body">
@@ -131,10 +125,6 @@
 
                             <!-- Regenerate Keys Button -->
                             <div class="col-12 mt-3">
-                                <button id="regenerateKeysBtn" class="btn btn-outline-danger">
-                                    <i class="fas fa-sync me-2"></i>
-                                    Regenerate Keys
-                                </button>
                                 <a href="{{ url_for('sender_select_host') }}" class="btn btn-primary">
                                     <i class="fas fa-angle-right me-2"></i>
                                     Continue
@@ -154,10 +144,6 @@
                             <p class="text-muted mb-4">
                                 You need to generate RSA keys to start sending files securely.
                             </p>
-                            <button id="generateKeysBtn" class="btn btn-primary">
-                                <i class="fas fa-plus-circle me-2"></i>
-                                Generate New Keys
-                            </button>
                         </div>
                         {% endif %}
                     </div>
@@ -197,66 +183,21 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize tooltips
     const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     tooltips.forEach(tooltip => new bootstrap.Tooltip(tooltip));
 
-    // Show/Hide Private Key
     const showPrivateKeyBtn = document.querySelector('.show-private-key');
     if (showPrivateKeyBtn) {
         showPrivateKeyBtn.addEventListener('click', function() {
             const container = this.closest('.private-key-container').parentElement.parentElement;
             container.classList.add('show-private');
             
-            // Hide key after 30 seconds
             setTimeout(() => {
                 container.classList.remove('show-private');
             }, 30000);
         });
     }
-
-    // Generate Keys Button
-    const generateKeysBtn = document.getElementById('generateKeysBtn');
-    if (generateKeysBtn) {
-        generateKeysBtn.addEventListener('click', async function() {
-            fetchGeneratedKeys();
-        });
-    }
-
-    // Regenerate Keys Button
-    const regenerateKeysBtn = document.getElementById('regenerateKeysBtn');
-    if (regenerateKeysBtn) {
-        regenerateKeysBtn.addEventListener('click', function() {
-            if (confirm('Are you sure you want to regenerate your keys? This will invalidate all existing file transfers.')) {
-                fetchGeneratedKeys();
-            }
-        });
-    }
 });
-
-async function fetchGeneratedKeys() {
-    try {
-        const response = await fetch('/generate_keys', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showAlert('success', result.message);
-            setTimeout(() => location.reload(), 1000);
-        } else {
-            showAlert('danger', result.message);
-        }
-    } catch (error) {
-        console.error('Error generating keys:', error);
-        showAlert('danger', 'Failed to generate keys. Please try again.');
-    }
-}
 
 function copyToClipboard(elementId) {
     const element = document.getElementById(elementId);

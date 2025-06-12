@@ -1,23 +1,4 @@
 export class UIManager {
-    constructor() {
-        this.initializeUIElements();
-    }
-    
-    initializeUIElements() {
-        this.createConnectionStatus();
-    }
-    
-    createConnectionStatus() {
-        const statusDiv = document.createElement('div');
-        statusDiv.id = 'connection-status';
-        statusDiv.className = 'connection-status disconnected';
-        statusDiv.innerHTML = `
-            <span class="status-dot"></span>
-            <span class="status-text">Disconnected</span>
-        `;
-        document.body.appendChild(statusDiv);
-    }
-    
     showLoading(action) {
         const actionArea = document.querySelector(`[data-action="${action}"]`);
         if (actionArea) {

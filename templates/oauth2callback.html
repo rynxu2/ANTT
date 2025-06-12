@@ -14,12 +14,10 @@
 {% block scripts %}
 <script>
     window.onload = function() {
-        // Close the window and send message to opener
         if (window.opener) {
             window.opener.postMessage({ type: 'oauth-complete' }, window.location.origin);
             window.close();
         } else {
-            // Redirect back to upload page if opened directly
             window.location.href = "{{ url_for('sender_secure_upload') }}";
         }
     };

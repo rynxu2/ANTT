@@ -42,7 +42,8 @@
                                 <td>{{ host.name }}</td>
                                 <td><code>{{ host.ip_address }}</code></td>
                                 <td>{{ host.description or 'No description' }}</td>
-                                <td>                                    {% if host.public_key %}
+                                <td>                                    
+                                    {% if host.public_key %}
                                     <span class="badge bg-success" data-bs-toggle="tooltip" title="This host can receive encrypted files">
                                         <i class="fas fa-key me-1"></i>
                                         Ready for Transfer
