@@ -22,7 +22,7 @@
                 </div>
             </div>
             
-            <div class="card-body">
+            <div id="received-files-container" class="card-body">
                 <!-- Host Selection -->
                 {% if hosts %}
                 <div class="mb-4">                    
@@ -107,11 +107,35 @@
                 
                 <!-- Files List -->
                 {% if received_files %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex gap-2">
+                            <button id="batch-verify-btn" class="btn btn-success" disabled>
+                                <i class="fas fa-check me-1"></i> Verify Selected
+                            </button>
+                            <button id="batch-download-btn" class="btn btn-primary" disabled>
+                                <i class="fas fa-download me-1"></i> Download Selected
+                            </button>
+                            <button id="batch-drive-btn" class="btn btn-primary" disabled>
+                                <i class="fab fa-google-drive me-1"></i> Upload Selected to Drive
+                            </button>
+                        </div>
+                        <div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="select-all-files">
+                                <label class="form-check-label" for="select-all-files">Select All</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table id="table-received-files" class="table table-hover align-middle mb-0">
                         <thead>
                             <tr>
-                                <th style="width: 35%">File Name</th>
+                                <th style="width: 5%">
+                                    <div class="text-center">#</div>
+                                </th>
+                                <th style="width: 30%">File Name</th>
                                 <th style="width: 20%">Sender</th>
                                 <th style="width: 15%">Size</th>
                                 <th style="width: 15%">Status</th>
@@ -120,7 +144,13 @@
                         </thead>
                         <tbody>
                             {% for file in received_files %}
-                            <tr data-session-token="{{ file.session_token }}">
+                            <tr data-session-token="{{ file.session_token }}" data-file-id="{{ file.id }}">
+                                <td class="text-center">
+                                    <input class="form-check-input file-checkbox" type="checkbox" 
+                                           data-status="{{ file.status }}"
+                                           data-session-token="{{ file.session_token }}"
+                                           data-file-id="{{ file.id }}">
+                                </td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="file-icon me-3">
@@ -167,9 +197,9 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-end">
-                                    <div style="display: flex; gap: 3px; justify-content: center;">
+                                    <div id="file-action-btn" style="display: flex; gap: 3px; justify-content: center;">
                                         {% if file.status == 'pending' %}
-                                        <button type="submit" class="btn btn-sm btn-success verify-btn"
+                                        <button type="button" class="btn btn-sm btn-success verify-btn"
                                                 data-csrf-token="{{ csrf_token() }}"
                                                 data-session-token="{{ file.session_token }}"
                                                 data-file-id="{{ file.id }}"
@@ -286,22 +316,6 @@
                                 <i class="fas fa-check-circle text-success display-1 mb-3 animate__animated animate__tada"></i>
                                 <h5 class="text-success">Verification Successful!</h5>
                                 <p>The file has been verified and is safe to download.</p>
-                                <div class="verification-summary mt-4">
-                                    <div class="row g-3">
-                                        <div class="col-6">
-                                            <div class="summary-item">
-                                                <i class="fas fa-check-circle text-success"></i>
-                                                <span class="ms-2">All security checks passed</span>
-                                            </div>
-                                        </div>
-                                        <div class="col-6">
-                                            <div class="summary-item">
-                                                <i class="fas fa-shield-alt text-success"></i>
-                                                <span class="ms-2">File integrity verified</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                             <!-- Verification Steps (grouped, with animation) -->
                             <div class="verification-steps row row-cols-1 row-cols-md-2 g-4">
@@ -504,323 +518,462 @@
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const verificationModal = document.getElementById('verificationModal');
-    const verificationModalInstance = new bootstrap.Modal(verificationModal);
-    let currentSessionToken = null;
-    let currentFileId = null;
+const CONFIG = {
+    STEP_DELAY: 400,
+    SUCCESS_HIDE_DELAY: 3000,
+    VERIFICATION_STEPS: [
+        { id: 'step-ip', name: 'IP Verification', endpoint: 'ip' },
+        { id: 'step-signature', name: 'Digital Signature', endpoint: 'signature' },
+        { id: 'step-hash', name: 'Hash Integrity', endpoint: 'metadata' },
+        { id: 'step-rsa', name: 'RSA Decryption', endpoint: 'session-key' },
+        { id: 'step-decrypt', name: 'File Decryption', endpoint: 'integrity' }
+    ]
+};
 
-    function showModalContent(contentClass) {
-        ['verification-info', 'verification-process', 'verification-error'].forEach(cls => {
-            document.querySelector(`.${cls}`).classList.add('d-none');
+// Utility Functions
+const Utils = {
+    delay: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+    
+    showAlert: (type, message) => {
+        // Implement proper alert system instead of browser alert()
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type === 'error' ? 'danger' : 'success'} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.insertBefore(alertDiv, document.body.firstChild);
+        
+        setTimeout(() => alertDiv.remove(), 5000);
+    },
+
+    getCSRFToken: () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
+    
+    fetchWithError: async (url, options = {}) => {
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'X-CSRFToken': Utils.getCSRFToken(),
+                    ...options.headers
+                },
+                ...options
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || `HTTP ${response.status}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error(`Fetch error for ${url}:`, error);
+            throw error;
+        }
+    }
+};
+
+// Step Management Class
+class VerificationStepManager {
+    constructor() {
+        this.steps = document.querySelectorAll('.verification-step');
+    }
+
+    resetAllSteps() {
+        this.steps.forEach(step => {
+            this.resetStep(step);
         });
-        document.querySelector(`.${contentClass}`).classList.remove('d-none');
+    }
+
+    resetStep(step) {
+        step.classList.remove('active', 'completed', 'error');
+        step.style.opacity = '0.5';
+        
+        const progressBar = step.querySelector('.progress-ring-bar');
+        const icons = {
+            waiting: step.querySelector('.step-waiting'),
+            success: step.querySelector('.step-success'),
+            error: step.querySelector('.step-error')
+        };
+        const details = step.querySelector('.step-details');
+
+        progressBar.style.strokeDashoffset = '100';
+        icons.waiting?.classList.remove('d-none');
+        icons.success?.classList.add('d-none');
+        icons.error?.classList.add('d-none');
+        details?.classList.add('d-none');
+    }
+
+    updateStepState(stepElement, state, message = '') {
+        const progressBar = stepElement.querySelector('.progress-ring-bar');
+        const icons = {
+            waiting: stepElement.querySelector('.step-waiting'),
+            success: stepElement.querySelector('.step-success'),
+            error: stepElement.querySelector('.step-error')
+        };
+        const details = stepElement.querySelector('.step-details');
+        const bgIcon = stepElement.querySelector('.step-icon');
+
+        stepElement.classList.remove('active', 'completed', 'error');
+        stepElement.style.opacity = '1';
+        
+        switch (state) {
+            case 'active':
+                stepElement.classList.add('active');
+                progressBar.style.strokeDashoffset = '0';
+                progressBar.style.stroke = '#0d6efd';
+                break;
+                
+            case 'success':
+                stepElement.classList.add('completed');
+                progressBar.style.stroke = '#198754';
+                icons.waiting?.classList.add('d-none');
+                icons.success?.classList.remove('d-none');
+                bgIcon?.classList.add('bg-success');
+                if (message) {
+                    details.innerHTML = `<small class="text-success">✓ ${message}</small>`;
+                    details.classList.remove('d-none');
+                }
+                break;
+                
+            case 'error':
+                stepElement.classList.add('error');
+                progressBar.style.stroke = '#dc3545';
+                icons.waiting?.classList.add('d-none');
+                icons.error?.classList.remove('d-none');
+                bgIcon?.classList.add('bg-danger');
+                if (message) {
+                    details.innerHTML = `<small class="text-danger">✗ ${message}</small>`;
+                    details.classList.remove('d-none');
+                }
+                break;
+        }
+    }
+}
+
+// Modal Management Class
+class VerificationModal {
+    constructor() {
+        this.modal = document.getElementById('verificationModal');
+        this.modalInstance = new bootstrap.Modal(this.modal);
+        this.stepManager = new VerificationStepManager();
+        this.currentSessionToken = null;
+        this.currentFileId = null;
+        
+        this.initializeEventListeners();
+    }
+
+    initializeEventListeners() {
+        // Close modal handlers
+        const closeButtons = this.modal.querySelectorAll('.btn-close, .btn-secondary[data-bs-dismiss="modal"]');
+        closeButtons.forEach(btn => {
+            btn.addEventListener('click', () => this.hide());
+        });
+
+        // Modal hidden event
+        this.modal.addEventListener('hidden.bs.modal', () => this.reset());
+
+        // Action buttons
+        document.getElementById('proceedVerifyBtn').addEventListener('click', 
+            () => this.runFullVerification());
+        document.getElementById('downloadVerifiedBtn').addEventListener('click', 
+            () => this.downloadFile());
+        document.getElementById('uploadDriveBtn').addEventListener('click', 
+            (e) => this.uploadToDrive(e));
+    }
+
+    show() {
+        this.modalInstance.show();
+    }
+
+    hide() {
+        this.modalInstance.hide();
+    }
+
+    reset() {
+        this.currentSessionToken = null;
+        this.currentFileId = null;
+        this.showContent('verification-info');
+        this.hideElements(['verification-success', 'downloadVerifiedBtn', 'uploadDriveBtn']);
+        this.showElements(['proceedVerifyBtn']);
+    }
+
+    showContent(contentClass) {
+        const contentTypes = ['verification-info', 'verification-process', 'verification-error'];
+        contentTypes.forEach(cls => {
+            document.querySelector(`.${cls}`)?.classList.add('d-none');
+        });
+        document.querySelector(`.${contentClass}`)?.classList.remove('d-none');
 
         if (contentClass !== 'verification-process') {
-            document.getElementById('verification-success').classList.add('d-none');
+            document.getElementById('verification-success')?.classList.add('d-none');
         }
     }
 
-    function resetVerificationSteps() {
-        document.querySelectorAll('.verification-step').forEach(step => {
-            step.classList.remove('active', 'completed', 'error');
-            step.style.opacity = '0.5';
-            
-            const progressBar = step.querySelector('.progress-ring-bar');
-            progressBar.style.strokeDashoffset = '100';
-            
-            step.querySelector('.step-waiting').classList.remove('d-none');
-            step.querySelector('.step-success').classList.add('d-none');
-            step.querySelector('.step-error').classList.add('d-none');
-            step.querySelector('.step-details').classList.add('d-none');
+    hideElements(elementIds) {
+        elementIds.forEach(id => {
+            document.getElementById(id)?.classList.add('d-none');
         });
     }
 
-    async function runVerificationStep(stepId, stepName, sessionToken, endpoint) {
-        const step = document.getElementById(stepId);
-        const progressBar = step.querySelector('.progress-ring-bar');
-        const waitingIcon = step.querySelector('.step-waiting');
-        const successIcon = step.querySelector('.step-success');
-        const bgIcon = step.querySelector('.step-icon');
-        const errorIcon = step.querySelector('.step-error');
-        const details = step.querySelector('.step-details');
+    showElements(elementIds) {
+        elementIds.forEach(id => {
+            document.getElementById(id)?.classList.remove('d-none');
+        });
+    }
 
-        step.classList.add('active');
-        step.style.opacity = '1';
-        progressBar.style.strokeDashoffset = '0';
-        progressBar.style.stroke = '#0d6efd';
-
+    async loadFileMetadata(sessionToken) {
         try {
-            const response = await fetch(`/verify/${sessionToken}/${endpoint}`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-                }
+            const metadata = await Utils.fetchWithError(`/file_metadata/${sessionToken}`);
+            
+            // Populate modal with metadata
+            const fields = {
+                'modal-filename': metadata.filename,
+                'modal-timestamp': new Date(metadata.timestamp).toLocaleString(),
+                'modal-iv': metadata.iv,
+                'modal-file-hash': metadata.file_hash,
+                'modal-signature': metadata.signature,
+                'modal-sender-ip': metadata.sender_ip,
+                'modal-sender-key': metadata.sender_key
+            };
+
+            Object.entries(fields).forEach(([id, value]) => {
+                const element = document.getElementById(id);
+                if (element) element.textContent = value;
             });
 
-            const result = await response.json();
-
-            if (response.ok) {
-                step.classList.remove('active');
-                step.classList.add('completed');
-                progressBar.style.stroke = '#198754';
-                waitingIcon.classList.add('d-none');
-                successIcon.classList.remove('d-none');
-                details.innerHTML = `<small class="text-success">✓ ${result.message}</small>`;
-                details.classList.remove('d-none');
-                bgIcon.classList.add('bg-success');
-                return true;
-            } else {
-                bgIcon.classList.add('bg-danger');
-                throw new Error(result.error || `${stepName} failed`);
-            }
+            return metadata;
         } catch (error) {
-            step.classList.remove('active');
-            step.classList.add('error');
-            progressBar.style.stroke = '#dc3545';
-            waitingIcon.classList.add('d-none');
-            errorIcon.classList.remove('d-none');
-            details.innerHTML = `<small class="text-danger">✗ ${stepName} failed: ${error.message}</small>`;
-            details.classList.remove('d-none');
-            bgIcon.classList.add('bg-danger');
+            Utils.showAlert('error', 'Failed to fetch file metadata: ' + error.message);
+            throw error;
+        }
+    }
+
+    async runVerificationStep(stepId, stepName, sessionToken, endpoint) {
+        const stepElement = document.getElementById(stepId);
+        this.stepManager.updateStepState(stepElement, 'active');
+
+        try {
+            const result = await Utils.fetchWithError(`/verify/${sessionToken}/${endpoint}`, {
+                method: 'POST'
+            });
+
+            this.stepManager.updateStepState(stepElement, 'success', result.message);
+            return true;
+        } catch (error) {
+            this.stepManager.updateStepState(stepElement, 'error', 
+                `${stepName} failed: ${error.message}`);
             return false;
         }
     }
 
-    async function runFullVerification(sessionToken) {
-        resetVerificationSteps();
-        showModalContent('verification-process');
-
-        const steps = [
-            { id: 'step-ip', name: 'IP Verification', endpoint: 'ip' },
-            { id: 'step-signature', name: 'Digital Signature', endpoint: 'signature' },
-            { id: 'step-hash', name: 'Hash Integrity', endpoint: 'metadata' },
-            { id: 'step-rsa', name: 'RSA Decryption', endpoint: 'session-key' },
-            { id: 'step-decrypt', name: 'File Decryption', endpoint: 'integrity' }
-        ];
-
+    async runFullVerification() {
+        if (!this.currentSessionToken) return;
 
         try {
-            document.getElementById('proceedVerifyBtn').disabled = true;
-            for (const step of steps) {
-                const success = await runVerificationStep(step.id, step.name, sessionToken, step.endpoint);
+            this.stepManager.resetAllSteps();
+            this.showContent('verification-process');
+            
+            const proceedBtn = document.getElementById('proceedVerifyBtn');
+            proceedBtn.disabled = true;
+            
+            document.querySelector('.status-loader')?.classList.remove('d-none');
+            this.hideElements(['verification-success']);
+            document.querySelector('.verification-head')?.classList.remove('d-none');
+
+            // Run verification steps sequentially
+            for (const step of CONFIG.VERIFICATION_STEPS) {
+                const success = await this.runVerificationStep(
+                    step.id, step.name, this.currentSessionToken, step.endpoint
+                );
 
                 if (!success) {
-                    document.getElementById('proceedVerifyBtn').disabled = false;
                     throw new Error(`${step.name} failed`);
                 }
 
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await Utils.delay(CONFIG.STEP_DELAY);
             }
-            document.getElementById('verification-success').classList.remove('d-none');
-            document.getElementById('downloadVerifiedBtn').classList.remove('d-none');
-            document.getElementById('uploadDriveBtn').classList.remove('d-none');
-            document.querySelector('.verification-head').classList.add('d-none');
-            document.getElementById('proceedVerifyBtn').disabled = false;
 
-            const finalize = await fetch(`/verify/${sessionToken}/complete`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                }
+            // Finalize verification
+            await Utils.fetchWithError(`/verify/${this.currentSessionToken}/complete`, {
+                method: 'POST'
             });
 
-            const result = await finalize.json();
-            if (finalize.ok) {
-                setTimeout(() => {
-                    document.getElementById('overall-status').textContent = 'Verification Completed Successfully';
-                    document.getElementById('overall-status').classList.remove('bg-secondary');
-                    document.getElementById('overall-status').classList.add('bg-success');
-                }, 1000);
-                document.querySelector('.status-loader').classList.add('d-none');
-                setTimeout(() => {
-                    verificationModalInstance.hide();
-                }, 3000);
-            } else {
-                throw new Error(result.error || 'Finalization failed');
-            }
+            this.showElements(['verification-success', 'downloadVerifiedBtn', 'uploadDriveBtn']);
+            this.hideElements(['proceedVerifyBtn']);
+            document.querySelector('.verification-head')?.classList.add('d-none');
+            document.querySelector('.status-loader')?.classList.add('d-none');
+            this.toggleVerifyButtons({ sessionToken: this.currentSessionToken, fileId: this.currentFileId });
+
+            // Auto-hide modal after success
+            setTimeout(() => this.hide(), CONFIG.SUCCESS_HIDE_DELAY);
 
         } catch (error) {
             console.error('Verification failed:', error);
             document.getElementById('verification-error-message').textContent = error.message;
-            showModalContent('verification-error');
+            this.showContent('verification-error');
+        } finally {
+            document.getElementById('proceedVerifyBtn').disabled = false;
         }
-    }    
-    
-    document.querySelectorAll('.verify-details-btn').forEach(btn => {
-        btn.addEventListener('click', async function() {
-            currentSessionToken = this.dataset.sessionToken;
-            try {
-                const response = await fetch(`/file_metadata/${currentSessionToken}`);
-                if (response.ok) {
-                    const metadata = await response.json();
+    }
 
-                    const status = metadata.status
-                    const errorStep = metadata.fail_step || null;
-                    const errorMessage = metadata.error_message || null;
-                    
-                    showModalContent('verification-process');
-                    document.getElementById('verification-success').classList.remove('d-none');
-                    document.getElementById('downloadVerifiedBtn').classList.remove('d-none');
-                    document.getElementById('uploadDriveBtn').classList.remove('d-none');
-                    document.querySelector('.verification-head').classList.add('d-none');
-                    document.getElementById('proceedVerifyBtn').classList.add('d-none');
+    toggleVerifyButtons({ sessionToken = null, fileId = null }) {
+        const selector = sessionToken
+            ? `[data-session-token="${sessionToken}"]`
+            : `[data-file-id="${fileId}"]`;
 
-                    document.querySelectorAll('.verification-step').forEach(step => {
-                        if (errorStep !== null && step.id === errorStep) {
-                            step.classList.add('error');
-                            step.style.opacity = '1';
-                            const progressBar = step.querySelector('.progress-ring-bar');
-                            progressBar.style.strokeDashoffset = '0';
-                            progressBar.style.stroke = '#dc3545';
-                            const waitingIcon = step.querySelector('.step-waiting');
-                            const errorIcon = step.querySelector('.step-error');
-                            const bgIcon = step.querySelector('.step-icon');
-                            if (waitingIcon) waitingIcon.classList.add('d-none');
-                            if (errorIcon) errorIcon.classList.remove('d-none');
-                            if (bgIcon) bgIcon.classList.add('bg-danger');
+        const verifyBtn = document.querySelector(`.verify-btn${selector}`);
 
-                            const details = step.querySelector('.step-details');
-                            details.innerHTML = `<small class="text-danger">✗ ${errorMessage}</small>`;
-                            details.classList.remove('d-none');
-                        } else {
-                            step.classList.add('completed');
-                            step.style.opacity = '1';
-                            const progressBar = step.querySelector('.progress-ring-bar');
-                            progressBar.style.strokeDashoffset = '0';
-                            progressBar.style.stroke = '#198754';
-                            const waitingIcon = step.querySelector('.step-waiting');
-                            const successIcon = step.querySelector('.step-success');
-                            const bgIcon = step.querySelector('.step-icon');
-                            if (waitingIcon) waitingIcon.classList.add('d-none');
-                            if (successIcon) successIcon.classList.remove('d-none');
-                            if (bgIcon) bgIcon.classList.add('bg-success');
-                        }
-                    });
+        verifyBtn.classList.remove('btn-success', 'verify-btn');
+        verifyBtn.classList.add('btn-info', 'verify-details-btn');
 
-                    verificationModalInstance.show();
-                } else {
-                    const error = await response.json();
-                    alert(error.error || 'Failed to fetch file metadata');
-                }
-            } catch (error) {
-                console.error('Error fetching metadata:', error);
-                alert('Failed to fetch file metadata: ' + error.message);
-            }
-        });
-    });
+        verifyBtn.setAttribute('data-bs-title', 'View Verification Details');
+        verifyBtn.setAttribute('title', 'View Verification Details');
 
-    document.querySelectorAll('.verify-btn').forEach(btn => {
-        btn.addEventListener('click', async function(e) {
-            currentSessionToken = this.dataset.sessionToken
-            currentFileId = this.dataset.fileId;
-
-            try {
-                const response = await fetch(`/file_metadata/${currentSessionToken}`);
-                if (response.ok) {
-                    const metadata = await response.json();
-                    
-                    document.getElementById('modal-filename').textContent = metadata.filename;
-                    document.getElementById('modal-timestamp').textContent = new Date(metadata.timestamp).toLocaleString();
-                    document.getElementById('modal-iv').textContent = metadata.iv;
-                    document.getElementById('modal-file-hash').textContent = metadata.file_hash;
-                    document.getElementById('modal-signature').textContent = metadata.signature;
-                    document.getElementById('modal-sender-ip').textContent = metadata.sender_ip;
-                    document.getElementById('modal-sender-key').textContent = metadata.sender_key;
-                    
-                    showModalContent('verification-info');
-                    document.getElementById('proceedVerifyBtn').disabled = false;
-                    document.getElementById('downloadVerifiedBtn').classList.add('d-none');
-                    document.getElementById('uploadDriveBtn').classList.add('d-none');
-                    
-                    verificationModalInstance.show();
-                } else {
-                    const error = await response.json();
-                    alert(error.error || 'Failed to fetch file metadata');
-                }
-            } catch (error) {
-                console.error('Error fetching metadata:', error);
-                alert('Failed to fetch file metadata: ' + error.message);
-            }
-        });
-    });
-
-    document.getElementById('proceedVerifyBtn').addEventListener('click', async () => {
-        if (!currentSessionToken) return;
-        await runFullVerification(currentSessionToken);
-    });
-
-    document.getElementById('downloadVerifiedBtn').addEventListener('click', () => {
-        if (currentSessionToken) {
-            window.location.href = `/download/${currentSessionToken}`;
-            verificationModalInstance.hide();
+        const icon = verifyBtn.querySelector('i');
+        if (icon) {
+            icon.classList.remove('fa-check');
+            icon.classList.add('fa-shield-alt');
         }
-    });
 
-    document.getElementById('uploadDriveBtn').addEventListener('click', async function(event) {
-        if (!currentFileId) throw new Error('No file selected');
+        if (bootstrap && bootstrap.Tooltip) {
+            bootstrap.Tooltip.getInstance(verifyBtn)?.dispose();
+            new bootstrap.Tooltip(verifyBtn);
+        }
+    }
+
+    downloadFile() {
+        if (this.currentSessionToken) {
+            window.location.href = `/download/${this.currentSessionToken}`;
+            this.hide();
+        }
+    }
+
+    async uploadToDrive(event) {
+        if (!this.currentFileId) {
+            Utils.showAlert('error', 'No file selected');
+            return;
+        }
 
         const driveBtn = event.currentTarget;
+        const originalHTML = driveBtn.innerHTML;
+        
         try {
             driveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             driveBtn.disabled = true;
             
-            const response = await fetch('/drive/upload', {
+            const result = await Utils.fetchWithError('/drive/upload', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-                },
-                body: `file_id=${currentFileId}`
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `file_id=${this.currentFileId}`
             });
             
-            if (response.ok) {
-                const result = await response.json();
-                showAlert('success', 'File uploaded to Drive successfully!');
-
-                if (result.drive_link) {
-                    window.open(result.drive_link, '_blank');
-                }
-            } else {
-                const error = await response.json();
-                showAlert('error', error.error || 'Failed to upload to Drive');
+            Utils.showAlert('success', 'File uploaded to Drive successfully!');
+            
+            if (result.drive_link) {
+                window.open(result.drive_link, '_blank');
             }
         } catch (error) {
-            console.error('Drive upload error:', error);
-            showAlert('error', 'Failed to upload to Drive: ' + error.message);
+            Utils.showAlert('error', 'Failed to upload to Drive: ' + error.message);
         } finally {
-            driveBtn.innerHTML = '<i class="fab fa-google-drive"></i>';
+            driveBtn.innerHTML = originalHTML;
             driveBtn.disabled = false;
-        }
-    });
-
-    document.getElementById('hostSelect').addEventListener('change', function() {
-        document.getElementById('loading-overlay').classList.remove('d-none');
-        this.form.submit();
-    });
-
-    function updateStatsDisplay(hostId, hosts) {
-        const titleElement = document.querySelector('.card-header h5');
-        if (hostId) {
-            const selectedHost = hosts.find(h => h.id === parseInt(hostId));
-            if (selectedHost) {
-                titleElement.innerHTML = `
-                    <i class="fas fa-chart-bar me-2"></i>
-                    Statistics for ${selectedHost.name}
-                `;
-            }
-        } else {
-            titleElement.innerHTML = `
-                <i class="fas fa-chart-bar me-2"></i>
-                Statistics for All Hosts
-            `;
         }
     }
 
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function(tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
+    setCurrentFile(sessionToken, fileId) {
+        this.currentSessionToken = sessionToken;
+        this.currentFileId = fileId;
+    }
+}
+
+// Main Application Class
+class FileReceiverApp {
+    constructor() {
+        this.modal = new VerificationModal();
+        this.initializeEventListeners();
+        this.initializeTooltips();
+    }
+
+    initializeEventListeners() {
+        const table = document.querySelector('#received-files-container');
+        if (table) {
+            table.addEventListener('click', this.handleTableClick.bind(this));
+        }
+
+        // Host selection
+        const hostSelect = document.getElementById('hostSelect');
+        if (hostSelect) {
+            hostSelect.addEventListener('change', () => {
+                document.getElementById('loading-overlay')?.classList.remove('d-none');
+                hostSelect.form.submit();
+            });
+        }
+    }
+
+    handleTableClick(e) {
+        const target = e.target.closest('button');
+        if (!target) return;
+
+        if (target.classList.contains('verify-btn')) {
+            const sessionToken = target.dataset.sessionToken;
+            const fileId = target.dataset.fileId;
+
+            this.modal.setCurrentFile(sessionToken, fileId);
+            this.modal.loadFileMetadata(sessionToken)
+                .then(() => {
+                    this.modal.showContent('verification-info');
+                    this.modal.showElements(['proceedVerifyBtn']);
+                    this.modal.hideElements(['downloadVerifiedBtn', 'uploadDriveBtn']);
+                    document.getElementById('proceedVerifyBtn').disabled = false;
+                    this.modal.show();
+                });
+        }
+
+        if (target.classList.contains('verify-details-btn')) {
+            const sessionToken = target.dataset.sessionToken;
+
+            this.modal.setCurrentFile(sessionToken, null);
+            this.modal.loadFileMetadata(sessionToken)
+                .then(metadata => {
+                    this.displayVerificationResults(metadata);
+                    this.modal.show();
+                });
+        }
+    }
+
+    displayVerificationResults(metadata) {
+        this.modal.showContent('verification-process');
+        this.modal.showElements(['verification-success', 'downloadVerifiedBtn', 'uploadDriveBtn']);
+        this.modal.hideElements(['proceedVerifyBtn']);
+        
+        document.querySelector('.verification-head')?.classList.add('d-none');
+        document.querySelector('.status-loader')?.classList.add('d-none');
+
+        // Update step states based on verification results
+        document.querySelectorAll('.verification-step').forEach(step => {
+            const isErrorStep = metadata.fail_step && step.id === metadata.fail_step;
+            
+            if (isErrorStep) {
+                this.modal.stepManager.updateStepState(step, 'error', metadata.error_message);
+            } else {
+                this.modal.stepManager.updateStepState(step, 'success', 'Completed successfully');
+            }
+        });
+    }
+
+    initializeTooltips() {
+        const tooltipTriggerList = [].slice.call(
+            document.querySelectorAll('[data-bs-toggle="tooltip"]')
+        );
+        tooltipTriggerList.map(tooltipTriggerEl => 
+            new bootstrap.Tooltip(tooltipTriggerEl)
+        );
+    }
+}
+
+// Initialize application when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    new FileReceiverApp();
 });
 </script>
 {% endblock %}
