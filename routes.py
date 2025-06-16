@@ -1026,129 +1026,18 @@ def get_file_metadata(session_token):
         app.logger.error(f"Error getting file metadata: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-@app.route('/drive/upload', methods=['POST'])
-def upload_to_drive():
-    """Upload a decrypted file from secure storage to Google Drive"""
-    try:
-        csrf_token = request.headers.get('X-CSRFToken')
-        if not csrf_token:
-            app.logger.error("CSRF token missing in headers")
-            return jsonify({'error': 'CSRF token missing'}), 400
-    
-        if 'file_id' not in request.form:
-            return jsonify({'error': 'No file specified'}), 400
-        
-        file_id = request.form['file_id']
-        upload_session = UploadSession.query.filter_by(id=file_id).first()
-        
-        if not upload_session:
-            return jsonify({'error': 'File not found'}), 404
-        
-        if upload_session.status != FILE_STATUS['VERIFIED']:
-            return jsonify({'error': 'File must be verified before uploading to Drive'}), 400
-        
-        client_ip = get_client_ip()
-        key_mapping = IPHostKeyMapping.query.filter_by(host_ip=client_ip).first()
-        if not key_mapping:
-            return jsonify({'error': 'Recipient keys not found'}), 404
-        
-        metadata = upload_session.get_metadata()
-        iv = base64.b64decode(metadata['iv'])
-        encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])
-        
-        session_key = decrypt_with_private_key(
-            encrypted_session_key,
-            key_mapping.private_key_pem
-        )
-        print(f"Session key decrypted successfully for upload to Drive: {upload_session.filepath}")
-        with open(upload_session.filepath, 'rb') as f:
-            file_contents = f.read()
-            
-        stored_iv = file_contents[:16]
-        encrypted_data = file_contents[16:]
-        
-        if stored_iv != iv:
-            app.logger.error("IV mismatch between stored file and metadata")
-            return jsonify({'error': 'IV verification failed'}), 400
-            
-        if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
-            app.logger.error("File integrity check failed during drive upload")
-            return jsonify({'error': 'File integrity check failed'}), 400
-            
-        decrypted_data = decrypt_file_aes(encrypted_data, session_key, stored_iv)
-        
-        try:
-            temp_decrypted_path = os.path.join(TEMP_FOLDER, f"drive_upload_{os.path.basename(upload_session.filepath)}")
-            os.makedirs(os.path.dirname(temp_decrypted_path), exist_ok=True)
-            with open(temp_decrypted_path, 'wb') as f:
-                f.write(decrypted_data)
-            app.logger.info(f"Decrypted file created at: {temp_decrypted_path}")
-            
-            # Check if recipient has Drive credentials
-            if not drive_manager.has_valid_credentials(client_ip):
-                return jsonify({
-                    'error': 'Google Drive authentication required',
-                    'auth_required': True
-                }), 403
-            
-            drive_result = drive_manager.upload_file(
-                temp_decrypted_path, 
-                upload_session.receiver_name,
-                client_ip
-            )
-            if not drive_result:
-                raise Exception('Failed to upload to Drive')
-
-            upload_session.drive_file_id = drive_result['file_id']
-            upload_session.drive_link = drive_result['web_link']
-            upload_session.source_type = 'drive'
-            db.session.commit()
-            
-            app.logger.info(f"File uploaded to Drive: {upload_session.filename}")
-            
-            try:
-                notify_status_change(upload_session)
-                app.logger.info(f"Drive upload status notification sent for session: {upload_session.id}")
-            except Exception as notify_error:
-                app.logger.error(f"Error sending drive upload notification: {str(notify_error)}")
-                
-            os.remove(temp_decrypted_path)
-            app.logger.info("Temporary decrypted file removed")
-            
-            return jsonify({
-                'success': True,
-                'drive_link': drive_result['web_link'],
-                'filename': upload_session.filename
-            })
-            
-        except Exception as e:
-            db.session.rollback()
-            raise
-        
-        finally:
-            try:
-                if os.path.exists(temp_decrypted_path):
-                    os.remove(temp_decrypted_path)
-                    app.logger.info("Temporary decrypted file removed")
-            except Exception as cleanup_error:
-                app.logger.warning(f"Failed to remove temporary decrypted file: {cleanup_error}")
-                    
-    except Exception as e:
-        app.logger.error(f"Drive upload error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/oauth2callback')
 def oauth2callback():
     """Handle Google OAuth2 callback"""
-    # Store client IP in session for OAuth flow
-    client_ip = get_client_ip()
-    session['authenticating_user_ip'] = client_ip
+    host_id = request.args.get('host_id') or session.get('authenticating_host_id')
+    if not host_id:
+        return render_template('oauth2callback.html', success=False, error='Missing host_id')
+    session['authenticating_host_id'] = host_id
     
     if request.args.get('code'):
-        # Handle OAuth callback with code
         try:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'client_secret_326222266772-gj08e0ofpf0ulk5lkjibn5vgto6bvtfo.apps.googleusercontent.com.json',
+                'client_secret_326222266772-h2pq8pcdj7a997a8pk05v3smkdm4c9m0.apps.googleusercontent.com.json',
                 SCOPES
             )
             
@@ -1158,8 +1047,8 @@ def oauth2callback():
             )
             
             credentials = flow.credentials
-            drive_manager.save_credentials(credentials, client_ip)
-            session.pop('authenticating_user_ip', None)
+            drive_manager.save_credentials(credentials, host_id)
+            session.pop('authenticating_host_id', None)
             
             return render_template('oauth2callback.html', success=True)
             
@@ -1170,14 +1059,15 @@ def oauth2callback():
     # Start OAuth flow
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            'client_secret_326222266772-gj08e0ofpf0ulk5lkjibn5vgto6bvtfo.apps.googleusercontent.com.json',
+            'client_secret_326222266772-h2pq8pcdj7a997a8pk05v3smkdm4c9m0.apps.googleusercontent.com.json',
             SCOPES,
             redirect_uri=request.base_url
         )
         
         auth_url, _ = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true'
+            include_granted_scopes='true', 
+            redirect_uri=request.base_url
         )
         
         return redirect(auth_url)

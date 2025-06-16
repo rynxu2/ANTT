@@ -14,56 +14,55 @@ SCOPES = [
 ]
 
 class DriveManager:
-    def __init__(self):
-        self.credentials = None
-        self.service = None
-
-    def initialize_service(self, user_ip):
-        """Initialize service for a specific user"""
-        token_path = f'tokens/token_{user_ip}.pickle'
+    def initialize_service(self, host_id):
+        """Initialize service for a specific host"""
+        token_path = f'tokens/token_{host_id}.pickle'
         os.makedirs('tokens', exist_ok=True)
 
+        credentials = None
         if os.path.exists(token_path):
             with open(token_path, 'rb') as token:
-                self.credentials = pickle.load(token)
+                credentials = pickle.load(token)
 
-        if not self.credentials or not self.credentials.valid:
-            if self.credentials and self.credentials.expired and self.credentials.refresh_token:
-                self.credentials.refresh(Request())
+        if not credentials or not credentials.valid:
+            if credentials and credentials.expired and credentials.refresh_token:
+                credentials.refresh(Request())
             else:
-                # Store the user_ip in session for oauth callback
-                session['authenticating_user_ip'] = user_ip
+                session['authenticating_host_id'] = host_id
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    'client_secret_326222266772-gj08e0ofpf0ulk5lkjibn5vgto6bvtfo.apps.googleusercontent.com.json', 
+                    'client_secret_326222266772-h2pq8pcdj7a997a8pk05v3smkdm4c9m0.apps.googleusercontent.com.json', 
                     SCOPES
                 )
-                self.credentials = flow.run_local_server(port=8080)
+                credentials = flow.run_local_server(port=8080)
 
             with open(token_path, 'wb') as token:
-                pickle.dump(self.credentials, token)
+                pickle.dump(credentials, token)
 
-        self.service = build('drive', 'v3', credentials=self.credentials)
+        self.service = build('drive', 'v3', credentials=credentials)
         return True
 
-    def save_credentials(self, credentials, user_ip):
-        """Save credentials for a specific user"""
-        token_path = f'tokens/token_{user_ip}.pickle'
+    def save_credentials(self, credentials, host_id):
+        """Save credentials for a specific host"""
+        token_path = f'tokens/token_{host_id}.pickle'
         os.makedirs('tokens', exist_ok=True)
         with open(token_path, 'wb') as token:
             pickle.dump(credentials, token)
 
-    def has_valid_credentials(self, user_ip):
-        """Check if user has valid credentials"""
-        token_path = f'tokens/token_{user_ip}.pickle'
+    def has_valid_credentials(self, host_id):
+        """Check if host has valid credentials"""
+        token_path = f'tokens/token_{host_id}.pickle'
         if not os.path.exists(token_path):
             return False
-
         try:
             with open(token_path, 'rb') as token:
                 credentials = pickle.load(token)
                 return credentials and credentials.valid
         except:
             return False
+
+    def get_service(self, host_id):
+        self.initialize_service(host_id)
+        return self.service
 
     def download_file(self, host_id, file_id, destination_path):
         try:
@@ -130,8 +129,9 @@ class DriveManager:
 
     def get_or_create_host_folder(self, host_id, host_name):
         try:
+            service = self.get_service(host_id)
             query = f"name='{host_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-            results = self.service.files().list(
+            results = service.files().list(
                 q=query,
                 spaces='drive',
                 fields='files(id, name)'
@@ -141,49 +141,43 @@ class DriveManager:
             if items:
                 return items[0]['id']
             else:
-                folder_id = self.create_folder(host_name)
+                folder_id = self.create_folder(host_id, host_name)
                 if folder_id:
-                    self.make_file_public(folder_id)
+                    self.make_file_public(host_id, folder_id)
                 return folder_id
 
         except HttpError as error:
             print(f'An error occurred: {error}')
             return None
 
-    def upload_file(self, file_path, host_name, user_ip):
-        """Upload file to a specific user's Drive"""
-        if not self.initialize_service(user_ip):
+    def upload_file(self, file_path, host_id, host_name):
+        """Upload file to a specific host's Drive"""
+        if not self.initialize_service(host_id):
             return None
-
         try:
-            folder_id = self.get_or_create_host_folder(host_name)
+            folder_id = self.get_or_create_host_folder(host_id, host_name)
             if not folder_id:
                 return None
-
             file_metadata = {
                 'name': os.path.basename(file_path),
                 'parents': [folder_id]
             }
-
             media = MediaFileUpload(
                 file_path, 
                 resumable=True,
                 chunksize=1024*1024
             )
-
-            file = self.service.files().create(
+            service = self.get_service(host_id)
+            file = service.files().create(
                 body=file_metadata,
                 media_body=media,
                 fields='id, webViewLink'
             ).execute()
-
-            self.make_file_public(file.get('id'))
-
+            self.make_file_public(host_id, file.get('id'))
             return {
                 'file_id': file.get('id'),
                 'web_link': file.get('webViewLink')
             }
-
         except HttpError as error:
             print(f'An error occurred: {error}')
             return None

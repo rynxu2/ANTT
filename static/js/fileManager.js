@@ -204,7 +204,6 @@ export class FileManager {
         this.showModalContent('verification-process');
         document.getElementById('verification-success')?.classList.remove('d-none');
         document.getElementById('downloadVerifiedBtn')?.classList.remove('d-none');
-        document.getElementById('uploadDriveBtn')?.classList.remove('d-none');
         document.querySelector('.verification-head')?.classList.add('d-none');
         document.getElementById('proceedVerifyBtn')?.classList.add('d-none');
 

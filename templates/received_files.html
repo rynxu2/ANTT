@@ -173,6 +173,7 @@
                                                 data-csrf-token="{{ csrf_token() }}"
                                                 data-session-token="{{ file.session_token }}"
                                                 data-file-id="{{ file.id }}"
+                                                data-host-id="{{ file.receiver_ip }}"
                                                 data-bs-toggle="tooltip"
                                                 data-bs-title="Verify File">
                                             <i class="fas fa-check"></i>
@@ -182,6 +183,7 @@
                                         <button type="button" class="btn btn-sm btn-info verify-details-btn"
                                                 data-session-token="{{ file.session_token }}"
                                                 data-file-id="{{ file.id }}"
+                                                data-host-id="{{ file.receiver_ip }}"
                                                 data-bs-toggle="tooltip" 
                                                 data-bs-title="View Verification Details">
                                             <i class="fas fa-shield-alt"></i>
@@ -474,10 +476,6 @@
                             <i class="fas fa-download me-2"></i>
                             Download File
                         </button>
-                        <button type="button" id="uploadDriveBtn" class="btn btn-primary">
-                            <i class="fab fa-google-drive me-2"></i>
-                            Upload to Drive
-                        </button>
                     </div>
                 </div>
             </div>
@@ -628,6 +626,7 @@ class VerificationModal {
         this.stepManager = new VerificationStepManager();
         this.currentSessionToken = null;
         this.currentFileId = null;
+        this.currentHostId = null;
         
         this.initializeEventListeners();
     }
@@ -647,8 +646,6 @@ class VerificationModal {
             () => this.runFullVerification());
         document.getElementById('downloadVerifiedBtn').addEventListener('click', 
             () => this.downloadFile());
-        document.getElementById('uploadDriveBtn').addEventListener('click', 
-            (e) => this.uploadToDrive(e));
     }
 
     show() {
@@ -662,8 +659,9 @@ class VerificationModal {
     reset() {
         this.currentSessionToken = null;
         this.currentFileId = null;
+        this.currentHostId = null;
         this.showContent('verification-info');
-        this.hideElements(['verification-success', 'downloadVerifiedBtn', 'uploadDriveBtn']);
+        this.hideElements(['verification-success', 'downloadVerifiedBtn']);
         this.showElements(['proceedVerifyBtn']);
     }
 
@@ -768,11 +766,11 @@ class VerificationModal {
                 method: 'POST'
             });
 
-            this.showElements(['verification-success', 'downloadVerifiedBtn', 'uploadDriveBtn']);
+            this.showElements(['verification-success', 'downloadVerifiedBtn']);
             this.hideElements(['proceedVerifyBtn']);
             document.querySelector('.verification-head')?.classList.add('d-none');
             document.querySelector('.status-loader')?.classList.add('d-none');
-            this.toggleVerifyButtons({ sessionToken: this.currentSessionToken, fileId: this.currentFileId });
+            this.toggleVerifyButtons({ sessionToken: this.currentSessionToken, fileId: this.currentFileId, hostId: this.currentHostId });
 
             // Auto-hide modal after success
             setTimeout(() => this.hide(), CONFIG.SUCCESS_HIDE_DELAY);
@@ -786,7 +784,7 @@ class VerificationModal {
         }
     }    
     
-    toggleVerifyButtons({ sessionToken = null, fileId = null }) {
+    toggleVerifyButtons({ sessionToken = null, fileId = null, hostId = null }) {
         const selector = sessionToken
             ? `button[data-session-token="${sessionToken}"]`
             : `button[data-file-id="${fileId}"]`;
@@ -807,6 +805,7 @@ class VerificationModal {
         verifyBtn.setAttribute('title', 'View Verification Details');
         verifyBtn.setAttribute('data-session-token', sessionToken);
         verifyBtn.setAttribute('data-file-id', fileId);
+        verifyBtn.setAttribute('data-host-id', hostId);
 
         // Update icon if present
         const icon = verifyBtn.querySelector('i');
@@ -827,85 +826,37 @@ class VerificationModal {
 
     downloadFile() {
         if (this.currentSessionToken) {
-            window.location.href = `/download/${this.currentSessionToken}`;
+            const sessionToken = this.currentSessionToken;
+            const fileId = this.currentFileId;
+            const onModalHidden = () => {
+                this.updateFileStatusToDownloaded(fileId);
+                window.location.href = `/download/${sessionToken}`;
+                this.modal.removeEventListener('hidden.bs.modal', onModalHidden);
+            };
+            this.modal.addEventListener('hidden.bs.modal', onModalHidden);
             this.hide();
-        }
-    }    async uploadToDrive(event) {
-        if (!this.currentFileId) {
-            Utils.showAlert('error', 'No file selected');
-            return;
-        }
-
-        const driveBtn = event.currentTarget;
-        const originalHTML = driveBtn.innerHTML;
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-        
-        try {
-            driveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            driveBtn.disabled = true;
-            
-            const result = await Utils.fetchWithError('/drive/upload', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': csrfToken
-                },  
-                body: `file_id=${this.currentFileId}`
-            });
-            
-            // Handle Google Drive authentication requirement
-            if (result.auth_required) {
-                // Open popup for authentication
-                const width = 600;
-                const height = 600;
-                const left = (screen.width / 2) - (width / 2);
-                const top = (screen.height / 2) - (height / 2);
-                
-                const authWindow = window.open(
-                    '/oauth2callback', 
-                    'Google Drive Authentication',
-                    `width=${width},height=${height},left=${left},top=${top}`
-                );
-                
-                // Wait for authentication to complete
-                await new Promise((resolve, reject) => {
-                    window.addEventListener('message', async (event) => {
-                        if (event.origin === window.location.origin && event.data.type === 'oauth-complete') {
-                            authWindow.close();
-                            resolve();
-                        }
-                    });
-                });
-                
-                // Retry upload after authentication
-                const retryResult = await Utils.fetchWithError('/drive/upload', {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-CSRFToken': Utils.getCSRFToken() 
-                    },  
-                    body: `file_id=${this.currentFileId}`
-                });
-                
-                if (retryResult.drive_link) {
-                    Utils.showAlert('success', 'File uploaded to Drive successfully!');
-                    window.open(retryResult.drive_link, '_blank');
-                }
-            } else if (result.drive_link) {
-                Utils.showAlert('success', 'File uploaded to Drive successfully!');
-                window.open(result.drive_link, '_blank');
-            }
-        } catch (error) {
-            Utils.showAlert('error', 'Failed to upload to Drive: ' + error.message);
-        } finally {
-            driveBtn.innerHTML = originalHTML;
-            driveBtn.disabled = false;
         }
     }
 
-    setCurrentFile(sessionToken, fileId) {
+    updateFileStatusToDownloaded(fileId) {
+        const row = document.querySelector(`tr[data-file-id="${fileId}"]`);
+        if (row) {
+            const statusCell = row.querySelector('td:nth-child(4)');
+            if (statusCell) {
+                statusCell.innerHTML = `
+                    <span class="status-badge status-downloaded">
+                        <i class="fas fa-download"></i>
+                        Downloaded
+                    </span>
+                `;
+            }
+        }
+    }
+
+    setCurrentFile(sessionToken, fileId, hostId) {
         this.currentSessionToken = sessionToken;
         this.currentFileId = fileId;
+        this.currentHostId = hostId;
     }
 }
 
@@ -940,13 +891,14 @@ class FileReceiverApp {
         if (target.classList.contains('verify-btn')) {
             const sessionToken = target.dataset.sessionToken;
             const fileId = target.dataset.fileId;
+            const hostId = target.dataset.hostId;
 
-            this.modal.setCurrentFile(sessionToken, fileId);
+            this.modal.setCurrentFile(sessionToken, fileId, hostId);
             this.modal.loadFileMetadata(sessionToken)
                 .then(() => {
                     this.modal.showContent('verification-info');
                     this.modal.showElements(['proceedVerifyBtn']);
-                    this.modal.hideElements(['downloadVerifiedBtn', 'uploadDriveBtn']);
+                    this.modal.hideElements(['downloadVerifiedBtn']);
                     document.getElementById('proceedVerifyBtn').disabled = false;
                     this.modal.show();
                 });
@@ -955,8 +907,9 @@ class FileReceiverApp {
         if (target.classList.contains('verify-details-btn')) {
             const sessionToken = target.dataset.sessionToken;
             const fileId = target.dataset.fileId;
+            const hostId = target.dataset.hostId;
 
-            this.modal.setCurrentFile(sessionToken, fileId);
+            this.modal.setCurrentFile(sessionToken, fileId, hostId);
             this.modal.loadFileMetadata(sessionToken)
                 .then(metadata => {
                     this.displayVerificationResults(metadata);
@@ -967,7 +920,7 @@ class FileReceiverApp {
 
     displayVerificationResults(metadata) {
         this.modal.showContent('verification-process');
-        this.modal.showElements(['verification-success', 'downloadVerifiedBtn', 'uploadDriveBtn']);
+        this.modal.showElements(['verification-success', 'downloadVerifiedBtn']);
         this.modal.hideElements(['proceedVerifyBtn']);
         
         document.querySelector('.verification-head')?.classList.add('d-none');
