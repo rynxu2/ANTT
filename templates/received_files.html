@@ -189,6 +189,13 @@
                                             <i class="fas fa-shield-alt"></i>
                                         </button>
                                         {% endif %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary download-btn"
+                                                data-session-token="{{ file.session_token }}"
+                                                data-file-id="{{ file.id }}"
+                                                data-bs-toggle="tooltip"
+                                                data-bs-title="{% if file.status == 'verified' or file.status == 'downloaded' %}Download Decrypted File{% else %}Download Encrypted File{% endif %}">
+                                            <i class="fas {% if file.status == 'verified' or file.status == 'downloaded' %}fa-download{% else %}fa-lock{% endif %}"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -748,7 +755,6 @@ class VerificationModal {
             this.hideElements(['verification-success']);
             document.querySelector('.verification-head')?.classList.remove('d-none');
 
-            // Run verification steps sequentially
             for (const step of CONFIG.VERIFICATION_STEPS) {
                 const success = await this.runVerificationStep(
                     step.id, step.name, this.currentSessionToken, step.endpoint
@@ -761,7 +767,6 @@ class VerificationModal {
                 await Utils.delay(CONFIG.STEP_DELAY);
             }
 
-            // Finalize verification
             await Utils.fetchWithError(`/verify/${this.currentSessionToken}/complete`, {
                 method: 'POST'
             });
@@ -772,7 +777,6 @@ class VerificationModal {
             document.querySelector('.status-loader')?.classList.add('d-none');
             this.toggleVerifyButtons({ sessionToken: this.currentSessionToken, fileId: this.currentFileId, hostId: this.currentHostId });
 
-            // Auto-hide modal after success
             setTimeout(() => this.hide(), CONFIG.SUCCESS_HIDE_DELAY);
 
         } catch (error) {
@@ -790,31 +794,39 @@ class VerificationModal {
             : `button[data-file-id="${fileId}"]`;
 
         const verifyBtn = document.querySelector(`${selector}.verify-btn`);
+        const downloadBtn = document.querySelector(`${selector}.download-btn`);
         
         if (!verifyBtn) {
             console.warn('Verify button not found for', { sessionToken, fileId });
             return;
         }
 
-        // Update button classes
         verifyBtn.classList.remove('btn-success', 'verify-btn');
         verifyBtn.classList.add('btn-info', 'verify-details-btn');
 
-        // Update tooltips
         verifyBtn.setAttribute('data-bs-title', 'View Verification Details');
         verifyBtn.setAttribute('title', 'View Verification Details');
         verifyBtn.setAttribute('data-session-token', sessionToken);
         verifyBtn.setAttribute('data-file-id', fileId);
         verifyBtn.setAttribute('data-host-id', hostId);
 
-        // Update icon if present
-        const icon = verifyBtn.querySelector('i');
-        if (icon) {
-            icon.classList.remove('fa-check');
-            icon.classList.add('fa-shield-alt');
+        downloadBtn.setAttribute('data-session-token', sessionToken);
+        downloadBtn.setAttribute('data-file-id', fileId);
+        downloadBtn.setAttribute('data-bs-title', 'Download Decrypted File');
+
+
+        const iconVerify = verifyBtn.querySelector('i');
+        if (iconVerify) {
+            iconVerify.classList.remove('fa-check');
+            iconVerify.classList.add('fa-shield-alt');
         }
 
-        // Handle tooltip instance
+        const iconDownload = downloadBtn.querySelector('i');
+        if (iconDownload) {
+            iconDownload.classList.remove('fa-lock');
+            iconDownload.classList.add('fa-download');
+        }
+
         const existingTooltip = bootstrap?.Tooltip?.getInstance(verifyBtn);
         if (existingTooltip) {
             existingTooltip.dispose();
@@ -915,6 +927,12 @@ class FileReceiverApp {
                     this.displayVerificationResults(metadata);
                     this.modal.show();
                 });
+        }
+
+        if (target.classList.contains('download-btn')) {
+            const sessionToken = target.dataset.sessionToken;
+            if (!sessionToken) return;
+            window.location.href = `/download/${sessionToken}`;
         }
     }
 

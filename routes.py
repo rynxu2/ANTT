@@ -5,7 +5,6 @@ import secrets
 import base64
 from datetime import datetime
 from flask import request, render_template, jsonify, session, flash, redirect, url_for, send_file
-from werkzeug.utils import secure_filename
 from app import app, db
 from models import IPUserKeyMapping, IPHostKeyMapping, UploadSession, Host, HostJoinRequest
 from drive_utils import drive_manager, SCOPES
@@ -26,9 +25,7 @@ from crypto_utils import (
 from storage_utils import (
     store_temp_file,
     move_temp_to_permanent,
-    cleanup_temp_files,
-    UPLOAD_FOLDER,
-    TEMP_FOLDER
+    cleanup_temp_files
 )
 from events import (
     notify_new_host, 
@@ -38,14 +35,12 @@ from events import (
     notify_new_join_request, 
     notify_request_approved, 
     notify_request_rejected, 
-    notify_access_revoked,
-    emit_status_change
+    notify_access_revoked
 )
 
 import io
 import ipaddress
 
-# Constants for file status
 FILE_STATUS = {
     'PENDING': 'pending',
     'VERIFIED': 'verified',
@@ -548,92 +543,84 @@ def upload_file():
 
 @app.route('/download/<session_token>')
 def download_file(session_token):
-    """Handle secure file download"""
+    """Download file: if verified/downloaded, return decrypted; else, return encrypted file as-is"""
     try:
         upload_session = UploadSession.query.filter_by(session_token=session_token).first()
         if not upload_session:
             return jsonify({'error': 'Invalid session token'}), 404
         
-        if upload_session.status != FILE_STATUS['VERIFIED']:
-            return jsonify({'error': 'File not verified'}), 400
-        
-        client_ip = get_client_ip()
-        key_mapping = IPHostKeyMapping.query.filter_by(
-            host_ip=client_ip, 
-            host_name=upload_session.receiver_name
-        ).first()
-        if not key_mapping:
-            return jsonify({'error': 'Recipient keys not found'}), 404
-        
-        metadata = upload_session.get_metadata()
-        iv = base64.b64decode(metadata['iv'])
-        encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])
-        
-        session_key = decrypt_with_private_key(
-            encrypted_session_key,
-            key_mapping.private_key_pem
-        )
-        
-        with open(upload_session.filepath, 'rb') as f:
-            file_contents = f.read()
+        if upload_session.status in [FILE_STATUS['VERIFIED'], FILE_STATUS['DOWNLOADED']]:
+            client_ip = get_client_ip()
+            key_mapping = IPHostKeyMapping.query.filter_by(
+                host_ip=client_ip, 
+                host_name=upload_session.receiver_name
+            ).first()
+            if not key_mapping:
+                return jsonify({'error': 'Recipient keys not found'}), 404
             
-        stored_iv = file_contents[:16]
-        encrypted_data = file_contents[16:]
-        
-        if stored_iv != iv:
-            app.logger.error("IV mismatch between stored file and metadata")
-            return jsonify({'error': 'IV verification failed'}), 400
-            
-        if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
-            app.logger.error("File integrity check failed during download")
-            return jsonify({'error': 'File integrity check failed'}), 400
-            
-        decrypted_data = decrypt_file_aes(encrypted_data, session_key, stored_iv)
-        
-        try:
-            file_stream = io.BytesIO(decrypted_data)
-            
-            upload_session.update_status(FILE_STATUS['DOWNLOADED'])
-            upload_session.downloaded_at = datetime.utcnow()
-            db.session.commit()
-            
-            notify_status_change(upload_session)
-            
-            app.logger.info(f"File download started: {upload_session.session_token}")
-            
-            try:
-                notify_status_change(upload_session)
-                app.logger.info(f"Download status change notification sent for session: {upload_session.session_token}")
-            except Exception as notify_error:
-                app.logger.error(f"Error sending download status notification: {str(notify_error)}")
-            
-            response = send_file(
-                file_stream,
-                mimetype='application/octet-stream',
-                as_attachment=True,
-                download_name=upload_session.filename
+            metadata = upload_session.get_metadata()
+            iv = base64.b64decode(metadata['iv'])
+            encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])
+            session_key = decrypt_with_private_key(
+                encrypted_session_key,
+                key_mapping.private_key_pem
             )
             
-            @response.call_on_close
-            def on_close():
-                try:
-                    file_stream.close()
-                except:
-                    upload_session.status = FILE_STATUS['VERIFIED']
-                    upload_session.downloaded_at = None
-                    db.session.commit()
-                    notify_status_change(upload_session)
+            with open(upload_session.filepath, 'rb') as f:
+                file_contents = f.read()
+            stored_iv = file_contents[:16]
+            encrypted_data = file_contents[16:]
             
-            return response
+            if stored_iv != iv:
+                app.logger.error("IV mismatch between stored file and metadata")
+                return jsonify({'error': 'IV verification failed'}), 400
+            if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
+                app.logger.error("File integrity check failed during download")
+                return jsonify({'error': 'File integrity check failed'}), 400
             
-        except Exception as e:
-            db.session.rollback()
-            upload_session.status = FILE_STATUS['VERIFIED']
-            upload_session.downloaded_at = None
-            db.session.commit()
-            notify_status_change(upload_session)
-            raise
-        
+            decrypted_data = decrypt_file_aes(encrypted_data, session_key, stored_iv)
+            try:
+                file_stream = io.BytesIO(decrypted_data)
+                print(f"Before status update: {upload_session.status}")
+                upload_session.update_status(FILE_STATUS['DOWNLOADED'])
+                upload_session.downloaded_at = datetime.utcnow()
+                db.session.commit()
+                print(f"After status update: {upload_session.status}")
+                notify_status_change(upload_session)
+                response = send_file(
+                    file_stream,
+                    mimetype='application/octet-stream',
+                    as_attachment=True,
+                    download_name=upload_session.filename
+                )
+                @response.call_on_close
+                def on_close():
+                    try:
+                        file_stream.close()
+                    except:
+                        print(f"Before status update: {upload_session.status}")
+                        upload_session.status = FILE_STATUS['VERIFIED']
+                        upload_session.downloaded_at = None
+                        db.session.commit()
+                        print(f"After status update: {upload_session.status}")
+                        notify_status_change(upload_session)
+                return response
+            except Exception as e:
+                db.session.rollback()
+                print(f"Before status update: {upload_session.status}")
+                upload_session.status = FILE_STATUS['VERIFIED']
+                upload_session.downloaded_at = None
+                db.session.commit()
+                print(f"After status update: {upload_session.status}")
+                notify_status_change(upload_session)
+                raise
+        else:
+            return send_file(
+                upload_session.filepath,
+                mimetype='application/octet-stream',
+                as_attachment=True,
+                download_name=upload_session.filename + '.enc'
+            )
     except Exception as e:
         app.logger.error(f"Download error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
@@ -658,132 +645,6 @@ def sender_secure_upload():
             return redirect(url_for('sender_dashboard'))
     
     return render_template('secure_upload.html', selected_host=selected_host)
-
-@app.route('/verify_file/<session_token>', methods=['POST'])
-def verify_file(session_token):
-    """Verify a received file"""
-    app.logger.info(f"Starting verification for session token: {session_token}")
-
-    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
-    if not upload_session:
-        app.logger.error(f"Upload session not found for token: {session_token}")
-        return jsonify({'error': 'Invalid session token'}), 404
-
-    client_ip = get_client_ip()
-    app.logger.info(f"Client IP: {client_ip}")
-
-    if upload_session.receiver_ip != client_ip:
-        app.logger.error(f"Unauthorized IP: {client_ip} (expected: {upload_session.receiver_ip})")
-        return jsonify({'error': 'Unauthorized'}), 403
-
-    try:
-        key_mapping = IPHostKeyMapping.query.filter_by(host_ip=client_ip, host_name=upload_session.receiver_name).first()
-        if not key_mapping:
-            app.logger.error(f"Recipient keys not found for IP: {client_ip}")
-            return jsonify({'error': 'Recipient keys not found'}), 404
-
-        sender_keys = IPUserKeyMapping.query.filter_by(ip_address=upload_session.sender_ip).first()
-        if not sender_keys:
-            app.logger.error(f"Sender keys not found for IP: {upload_session.sender_ip}")
-            return jsonify({'error': 'Sender keys not found'}), 404
-
-        try:
-            metadata = upload_session.get_metadata()
-            iv = base64.b64decode(metadata['iv'])
-            encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])
-            metadata_signature = base64.b64decode(metadata['metadata_signature'])
-        except Exception as e:
-            app.logger.error(f"Metadata decoding failed: {str(e)}")
-            return jsonify({'error': 'Metadata decoding error'}), 400
-
-        try:
-            is_valid = verify_signature(
-                json.dumps(metadata['metadata']).encode('utf-8'),
-                metadata_signature,
-                sender_keys.public_key_pem
-            )
-        except Exception as e:
-            app.logger.error(f"Signature verification error: {str(e)}")
-            return jsonify({'error': 'Signature verification failed'}), 400
-
-        if not is_valid:
-            app.logger.error("Invalid file signature (failed verification)")
-            return jsonify({'error': 'Invalid file signature'}), 400
-
-        if metadata['metadata']['sender_ip'] != upload_session.sender_ip:
-            app.logger.error("Sender IP mismatch in metadata")
-            return jsonify({'error': 'Sender IP verification failed'}), 400
-
-        try:
-            timestamp = datetime.fromisoformat(metadata['metadata']['timestamp'])
-        except Exception as e:
-            app.logger.error(f"Timestamp parsing failed: {str(e)}")
-            return jsonify({'error': 'Invalid timestamp format'}), 400
-
-        time_diff = datetime.utcnow() - timestamp
-        if time_diff.total_seconds() > 1800:
-            app.logger.error("Request expired - timestamp too old")
-            return jsonify({'error': 'Request expired'}), 400
-
-        try:
-            session_key = decrypt_with_private_key(
-                encrypted_session_key,
-                key_mapping.private_key_pem
-            )
-        except Exception as e:
-            app.logger.error(f"Failed to decrypt session key: {str(e)}")
-            return jsonify({'error': 'Invalid session key'}), 400
-
-        try:
-            with open(upload_session.filepath, 'rb') as f:
-                file_contents = f.read()
-        except Exception as e:
-            app.logger.error(f"Error reading encrypted file: {str(e)}")
-            return jsonify({'error': 'File read error'}), 400
-
-        stored_iv = file_contents[:16]
-        encrypted_data = file_contents[16:]
-
-        if stored_iv != iv:
-            app.logger.error("IV mismatch between file and metadata")
-            return jsonify({'error': 'IV verification failed'}), 400
-
-        if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
-            app.logger.error("File hash does not match expected value")
-            return jsonify({'error': 'File integrity check failed'}), 400
-
-        try:
-            decrypted_test = decrypt_file_aes(encrypted_data, session_key, stored_iv)
-            app.logger.info(f"Decryption test passed for session: {session_token}")
-        except Exception as e:
-            app.logger.error(f"Test decryption failed: {str(e)}")
-            return jsonify({'error': 'File decryption test failed'}), 400
-
-        try:
-            upload_session.update_status(FILE_STATUS['VERIFIED'])
-            db.session.commit()
-            app.logger.info(f"File verified and status updated: {session_token}")
-        except Exception as e:
-            app.logger.error(f"Database update failed: {str(e)}")
-            return jsonify({'error': 'Database error during update'}), 500
-
-        try:
-            notify_status_change(upload_session)
-            app.logger.info(f"Notification sent for verified file: {session_token}")
-        except Exception as notify_error:
-            app.logger.warning(f"Notification failed: {str(notify_error)}")
-
-        return jsonify({
-            'message': 'File verified successfully',
-            'filename': upload_session.filename,
-            'file_size': upload_session.file_size,
-            'status': upload_session.status,
-            'session_token': upload_session.session_token
-        })
-
-    except Exception as e:
-        app.logger.error(f"Unexpected error in verification: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/transfer_status/<session_token>')
 def transfer_status(session_token):
@@ -1056,7 +917,6 @@ def oauth2callback():
             app.logger.error(f"OAuth callback error: {str(e)}")
             return render_template('oauth2callback.html', success=False, error=str(e))
     
-    # Start OAuth flow
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
             'client_secret_326222266772-h2pq8pcdj7a997a8pk05v3smkdm4c9m0.apps.googleusercontent.com.json',
@@ -1197,8 +1057,10 @@ def verify_integrity(session_token):
 def complete_verification(session_token):
     upload_session = UploadSession.query.filter_by(session_token=session_token).first()
     try:
+        print(f"Before status update: {upload_session.status}")
         upload_session.update_status(FILE_STATUS['VERIFIED'])
         db.session.commit()
+        print(f"After status update: {upload_session.status}")
         notify_status_change(upload_session)
         return jsonify({'message': 'File verified and completed'})
     except Exception as e:

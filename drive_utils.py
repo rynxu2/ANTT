@@ -80,25 +80,6 @@ class DriveManager:
             print(f'An error occurred: {error}')
             return False
 
-    def create_folder(self, host_id, folder_name, parent_folder_id=None):
-        try:
-            service = self.get_service(host_id)
-            file_metadata = {
-                'name': folder_name,
-                'mimeType': 'application/vnd.google-apps.folder'
-            }
-            if parent_folder_id:
-                file_metadata['parents'] = [parent_folder_id]
-
-            folder = service.files().create(
-                body=file_metadata,
-                fields='id'
-            ).execute()
-            return folder.get('id')
-        except HttpError as error:
-            print(f'An error occurred: {error}')
-            return None
-
     def get_file_link(self, host_id, file_id):
         try:
             service = self.get_service(host_id)
@@ -110,22 +91,6 @@ class DriveManager:
         except HttpError as error:
             print(f'An error occurred: {error}')
             return None
-
-    def make_file_public(self, host_id, file_id):
-        try:
-            service = self.get_service(host_id)
-            permission = {
-                'type': 'anyone',
-                'role': 'reader'
-            }
-            service.permissions().create(
-                fileId=file_id,
-                body=permission
-            ).execute()
-            return True
-        except HttpError as error:
-            print(f'An error occurred: {error}')
-            return False
 
     def get_or_create_host_folder(self, host_id, host_name):
         try:

@@ -88,6 +88,7 @@ def notify_status_change(session_data):
             return
             
         for client_ip in client_ips:
+            print(f"Notifying client {client_ip} about status change for session {session_data.session_token}")
             try:
                 notify_action_start(client_ip, 'status-update')
                 

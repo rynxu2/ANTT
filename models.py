@@ -125,18 +125,3 @@ class HostJoinRequest(db.Model):
     revoked_at = db.Column(db.DateTime)
 
     host = db.relationship('Host', backref=db.backref('join_requests', lazy=True))
-
-class FileStatus(db.Model):
-    """Store status information for files"""
-    id = db.Column(db.Integer, primary_key=True)
-    session_token = db.Column(db.String(64), db.ForeignKey('upload_session.session_token'), nullable=False)
-    status = db.Column(db.String(20), default='pending')  # pending, processing, completed, failed
-    failed_step = db.Column(db.String(50))  # Step where failure occurred (if status is failed)
-    error_message = db.Column(db.Text)  # Error description (if status is failed)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    upload_session = db.relationship('UploadSession', backref=db.backref('file_statuses', lazy=True))
-
-    def __repr__(self):
-        return f'<FileStatus {self.session_token} - {self.status}>'

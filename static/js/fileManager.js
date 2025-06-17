@@ -106,6 +106,13 @@ export class FileManager {
                             data-bs-title="Verify File">
                         <i class="fas fa-check"></i>
                     </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary download-btn"
+                            data-session-token="${data.session_token}"
+                            data-file-id="${data.id}"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Download Encrypted File">
+                        <i class="fas fa-lock"></i>
+                    </button>
                 </div>
             </td>
         `;
@@ -127,6 +134,7 @@ export class FileManager {
         if (window.location.pathname.includes('/receiver_files')) {
             this.updateActionButtons(fileRow, status);
             this.bindVerificationModal(fileRow, session_token);
+            this.bindDownloadButton(fileRow, session_token);
         }
     }
 
@@ -161,7 +169,7 @@ export class FileManager {
         const actionCell = fileRow.querySelector('td:last-child');
         if (!actionCell) return;
 
-        if (['verified', 'failed'].includes(status)) {
+        if (['verified', 'downloaded'].includes(status)) {
             actionCell.innerHTML = `
                 <div class="text-center">
                     <button class="btn btn-sm btn-info verify-details-btn"
@@ -170,6 +178,32 @@ export class FileManager {
                             data-bs-toggle="tooltip" 
                             data-bs-title="View Verification Details">
                         <i class="fas fa-shield-alt"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary download-btn"
+                            data-session-token="${fileRow.dataset.sessionToken}"
+                            data-file-id="${fileRow.dataset.fileId}"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Download Decrypted File">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>`;
+        }
+        else if (['failed', 'pending'].includes(status)) {
+            actionCell.innerHTML = `
+                <div class="text-center">
+                    <button class="btn btn-sm btn-danger verify-details-btn"
+                            data-session-token="${fileRow.dataset.sessionToken}"
+                            data-file-id="${fileRow.dataset.fileId}"
+                            data-bs-toggle="tooltip" 
+                            data-bs-title="View Verification Details">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary download-btn"
+                            data-session-token="${fileRow.dataset.sessionToken}"
+                            data-file-id="${fileRow.dataset.fileId}"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Download Encrypted File">
+                        <i class="fas fa-lock"></i>
                     </button>
                 </div>`;
         }
@@ -188,6 +222,19 @@ export class FileManager {
 
                 this.showVerificationSteps(data);
                 modal.show();
+            } catch (e) {
+                alert('Error fetching metadata: ' + e.message);
+            }
+        });
+    }
+
+    bindDownloadButton(fileRow, sessionToken) {
+        const btn = fileRow.querySelector('.download-btn');
+        if (!btn) return;
+
+        btn.addEventListener('click', async () => {
+            try {
+                window.location.href = `/download/${sessionToken}`;
             } catch (e) {
                 alert('Error fetching metadata: ' + e.message);
             }
