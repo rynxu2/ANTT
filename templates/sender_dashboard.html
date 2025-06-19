@@ -6,13 +6,13 @@
     <div class="page-header mb-4">
         <div class="row align-items-center">
             <div class="col">
-                <h4 class="mb-0">Sensor Dashboard</h4>
-                <p class="text-muted mb-0">Monitor and manage your file transfers</p>
+                <h4 class="mb-0">Bảng điều khiển người gửi</h4>
+                <p class="text-muted mb-0">Theo dõi và quản lý các lần gửi file của bạn</p>
             </div>
             <div class="col-auto">
                 <a href="{{ url_for('sender_key_management') }}" class="btn btn-primary">
                     <i class="fas fa-upload me-2"></i>
-                    New Transfer
+                    Gửi file mới
                 </a>
             </div>
         </div>
@@ -29,7 +29,7 @@
                     </div>
                     <div class="stat-card-content">
                         <div class="stat-card-value">{{ stats.total_files }}</div>
-                        <div class="stat-card-label">Total Files</div>
+                        <div class="stat-card-label">Tổng số file</div>
                     </div>
                 </div>
             </div>
@@ -44,7 +44,7 @@
                     </div>
                     <div class="stat-card-content">
                         <div class="stat-card-value">{{ stats.total_size | filesizeformat }}</div>
-                        <div class="stat-card-label">Total Size</div>
+                        <div class="stat-card-label">Tổng dung lượng</div>
                     </div>
                 </div>
             </div>
@@ -59,7 +59,7 @@
                     </div>
                     <div class="stat-card-content">
                         <div class="stat-card-value stat-card-completed">{{ stats.completed }}</div>
-                        <div class="stat-card-label">Completed</div>
+                        <div class="stat-card-label">Đã hoàn thành</div>
                     </div>
                 </div>
             </div>
@@ -72,12 +72,12 @@
             <div class="d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center">
                     <i class="fas fa-history text-primary me-2"></i>
-                    <h5 class="mb-0">Recent Transfers</h5>
+                    <h5 class="mb-0">Giao dịch gần đây</h5>
                 </div>
                 <div class="card-actions">
                     <button class="btn btn-sm btn-light-primary" onclick="refreshTransfers()">
                         <i class="fas fa-sync-alt me-2"></i>
-                        Refresh
+                        Làm mới
                     </button>
                 </div>
             </div>
@@ -88,12 +88,12 @@
                 <table class="sensor-files table align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>Date</th>
+                            <th>Ngày</th>
                             <th>File</th>
-                            <th>Recipient</th>
-                            <th>Size</th>
-                            <th>Status</th>
-                            <th class="text-end">Actions</th>
+                            <th>Người nhận</th>
+                            <th>Trạng thái</th>
+                            <th>Kích thước</th>
+                            <th class="text-end">Hành động</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -125,22 +125,22 @@
                                 {% if transfer.status == 'verified' %}
                                 <span class="status-badge status-verified">
                                     <i class="fas fa-check-circle me-1"></i>
-                                    Verified
+                                    Đã xác thực
                                 </span>
                                 {% elif transfer.status == 'downloaded' %}
                                 <span class="status-badge status-downloaded">
                                     <i class="fas fa-download me-1"></i>
-                                    Downloaded
+                                    Đã tải về
                                 </span>
                                 {% elif transfer.status == 'pending' %}
                                 <span class="status-badge status-pending">
                                     <i class="fas fa-clock me-1"></i>
-                                    Pending
+                                    Đang chờ
                                 </span>
                                 {% elif transfer.status == 'failed' %}
                                 <span class="status-badge status-failed">
                                     <i class="fas fa-times-circle me-1"></i>
-                                    Failed
+                                    Lỗi
                                 </span>
                                 {% endif %}
                             </td>
@@ -149,7 +149,7 @@
                                 <div class="btn-group">
                                     <button class="btn btn-sm btn-light" 
                                             data-bs-toggle="tooltip" 
-                                            data-bs-title="View Details"
+                                            data-bs-title="Xem chi tiết"
                                             onclick="showTransferDetails('{{ transfer.session_token }}')">
                                         <i class="fas fa-info-circle"></i>
                                     </button>
@@ -165,11 +165,11 @@
                 <div class="empty-state-icon mb-3">
                     <i class="fas fa-inbox fa-3x"></i>
                 </div>
-                <h5 class="empty-state-title">No Recent Transfers</h5>
-                <p class="empty-state-subtitle mb-3">Start by uploading a file to a registered host</p>
+                <h5 class="empty-state-title">Chưa có giao dịch nào</h5>
+                <p class="empty-state-subtitle mb-3">Hãy bắt đầu bằng cách tải file lên một host đã đăng ký</p>
                 <a href="{{ url_for('sender_key_management') }}" class="btn btn-primary">
                     <i class="fas fa-upload me-2"></i>
-                    Upload File
+                    Tải file lên
                 </a>
             </div>
             {% endif %}
@@ -184,14 +184,14 @@
             <div class="modal-header">
                 <h5 class="modal-title">
                     <i class="fas fa-info-circle text-primary me-2"></i>
-                    Transfer Details
+                    Chi tiết giao dịch
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="transferDetailsContent">
                 <div class="d-flex justify-content-center py-4">
                     <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
+                        <span class="visually-hidden">Đang tải...</span>
                     </div>
                 </div>
             </div>
@@ -221,7 +221,7 @@ function showTransferDetails(sessionToken) {
             content.innerHTML = `
                 <div class="transfer-details">
                     <div class="detail-item mb-3">
-                        <label class="detail-label">Status</label>
+                        <label class="detail-label">Trạng thái</label>
                         <div class="detail-value">
                             <span class="status-badge status-${data.status.toLowerCase()}">
                                 <i class="fas fa-${getStatusIcon(data.status)} me-1"></i>
@@ -230,7 +230,7 @@ function showTransferDetails(sessionToken) {
                         </div>
                     </div>
                     <div class="detail-item mb-3">
-                        <label class="detail-label">Last Updated</label>
+                        <label class="detail-label">Cập nhật lần cuối</label>
                         <div class="detail-value">
                             ${new Date(data.updated_at).toLocaleString()}
                         </div>
@@ -242,7 +242,7 @@ function showTransferDetails(sessionToken) {
             content.innerHTML = `
                 <div class="alert alert-danger">
                     <i class="fas fa-exclamation-circle me-2"></i>
-                    Failed to load transfer details
+                    Không thể tải chi tiết giao dịch
                 </div>
             `;
         });

@@ -30,7 +30,7 @@ class DriveManager:
             else:
                 session['authenticating_host_id'] = host_id
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    'client_secret_326222266772-h2pq8pcdj7a997a8pk05v3smkdm4c9m0.apps.googleusercontent.com.json', 
+                    'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json', 
                     SCOPES
                 )
                 credentials = flow.run_local_server(port=8080)

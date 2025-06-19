@@ -58,14 +58,14 @@ export class RequestManager {
                             <div class="d-flex gap-2">
                                 <form action="/host/request/${data.request_id}/approve" method="POST" class="approve-form">
                                     <input type="hidden" name="csrf_token" value="${csrf}">
-                                    <input type="hidden" name="message" value="Really!">
-                                    <button type="submit" class="btn btn-sm btn-light text-success px-3" title="Approve">
+                                    <input type="hidden" name="message" value="Đồng ý!">
+                                    <button type="submit" class="btn btn-sm btn-light text-success px-3" title="Duyệt">
                                         <i class="fas fa-check"></i>
                                     </button>
                                 </form>
                                 <form action="/host/request/${data.request_id}/reject" method="POST" class="reject-form">
                                     <input type="hidden" name="csrf_token" value="${csrf}">
-                                    <button type="submit" class="btn btn-sm btn-light text-danger px-3" title="Reject">
+                                    <button type="submit" class="btn btn-sm btn-light text-danger px-3" title="Từ chối">
                                         <i class="fas fa-times"></i>
                                     </button>
                                 </form>
@@ -87,7 +87,7 @@ export class RequestManager {
         const current = parseInt(pendingCount.textContent.match(/\d+/)?.[0] || '0');
         pendingCount.innerHTML = `
             <i class="fas fa-clock me-1"></i>
-            ${current + 1} Pending
+            ${current + 1} Đang chờ
         `;
     }
 
@@ -154,13 +154,13 @@ export class RequestManager {
             <div class="mb-2">
                 <span class="badge bg-success d-block p-2 mb-2">
                     <i class="fas fa-check-circle me-1"></i>
-                    Approved ${data.approved_at}
+                    Đã duyệt ${data.approved_at}
                 </span>
                 <form action="/select_host/${data.host_id}" method="POST" class="select-host-form">
                     <input type="hidden" name="csrf_token" value="${this.getCsrfToken()}">
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="fas fa-upload me-2"></i>
-                        Select this Host
+                        Chọn Host này
                     </button>
                 </form>
             </div>
@@ -174,17 +174,17 @@ export class RequestManager {
             <div class="alert alert-danger mb-2">
                 <div class="d-flex align-items-center mb-2">
                     <i class="fas fa-times-circle text-danger me-2"></i>
-                    <strong>Request Rejected</strong>
+                    <strong>Yêu cầu bị từ chối</strong>
                 </div>
                 <small class="d-block text-muted mb-2">
-                    Rejected: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}
+                    Đã từ chối: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}
                 </small>
             </div>
             <form action="/host/${data.host_id}/request_join" method="POST" class="join-host-form">
                 <input type="hidden" name="csrf_token" value="${this.getCsrfToken()}">
                 <button type="submit" class="btn btn-outline-primary w-100">
                     <i class="fas fa-redo me-1"></i>
-                    Request Again
+                    Gửi lại yêu cầu
                 </button>
             </form>
         `;
@@ -197,17 +197,17 @@ export class RequestManager {
             <div class="alert alert-secondary mb-2">
                 <div class="d-flex align-items-center mb-2">
                     <i class="fas fa-ban text-secondary me-2"></i>
-                    <strong>Access Revoked</strong>
+                    <strong>Đã thu hồi quyền truy cập</strong>
                 </div>
                 <small class="d-block text-muted mb-2">
-                    Revoked: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}
+                    Đã thu hồi: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}
                 </small>
             </div>
             <form action="/host/${data.host_id}/request_join" method="POST" class="join-host-form">
                 <input type="hidden" name="csrf_token" value="${this.getCsrfToken()}">
                 <button type="submit" class="btn btn-outline-primary w-100">
                     <i class="fas fa-redo me-1"></i>
-                    Request Again
+                    Gửi lại yêu cầu
                 </button>
             </form>
         `;

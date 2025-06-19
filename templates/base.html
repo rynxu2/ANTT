@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="vi" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}RSA Network Guard{% endblock %}</title>
-    
+    <title>{% block title %}SecureCV{% endblock %}</title>
     <!-- Client IP -->
     <meta name="client-ip" content="{{ request.remote_addr }}">
     <!-- Bootstrap CSS -->
@@ -15,6 +14,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/icon.png') }}">
     <!-- CSRF Token -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
@@ -27,9 +28,9 @@
     <div id="loading-overlay" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="background: rgba(0,0,0,0.7); z-index: 9999;">
         <div class="position-absolute top-50 start-50 translate-middle text-center">
             <div class="spinner-border text-primary mb-2" role="status" style="width: 3rem; height: 3rem;">
-                <span class="visually-hidden">Loading...</span>
+                <span class="visually-hidden">Đang tải...</span>
             </div>
-            <div class="text-light">Processing...</div>
+            <div class="text-light">Đang xử lý...</div>
         </div>
     </div>
 
@@ -38,12 +39,11 @@
         <div class="container">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
                 <i class="fas fa-shield-alt me-2 text-primary"></i>
-                <span>RSA Network Guard</span>
+                <span>SecureCV</span>
             </a>
             <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            
             <div class="collapse navbar-collapse" id="navbarContent">
                 <ul class="navbar-nav ms-auto">
                     {% if request.endpoint and 'receiver' in request.endpoint %}
@@ -53,7 +53,7 @@
                             <span class="nav-icon">
                                 <i class="fas fa-chart-line"></i>
                             </span>
-                            <span>Dashboard</span>
+                            <span>Bảng điều khiển</span>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -61,7 +61,7 @@
                             <span class="nav-icon">
                                 <i class="fas fa-server"></i>
                             </span>
-                            <span>Hosts</span>
+                            <span>Điểm nhận</span>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -69,7 +69,7 @@
                             <span class="nav-icon">
                                 <i class="fas fa-user-plus"></i>
                             </span>
-                            <span>Approval</span>
+                            <span>Yêu cầu tham gia</span>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -77,7 +77,7 @@
                             <span class="nav-icon">
                                 <i class="fas fa-inbox"></i>
                             </span>
-                            <span>Files</span>
+                            <span>File nhận</span>
                         </a>
                     </li>
                     {% elif request.endpoint and 'sender' in request.endpoint %}
@@ -87,7 +87,7 @@
                             <span class="nav-icon">
                                 <i class="fas fa-chart-line"></i>
                             </span>
-                            <span>Dashboard</span>
+                            <span>Bảng điều khiển</span>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -95,7 +95,7 @@
                             <span class="nav-icon">
                                 <i class="fas fa-upload"></i>
                             </span>
-                            <span>Upload</span>
+                            <span>Tải lên</span>
                         </a>
                     </li>
                     {% endif %}
@@ -103,7 +103,7 @@
                     <li class="nav-item ms-2">
                         <a class="nav-link btn btn-outline-primary btn-sm px-3 switch-mode" href="{{ url_for('index') }}">
                             <i class="fas fa-exchange-alt me-1"></i>
-                            Switch Mode
+                            Chuyển chế độ
                         </a>
                     </li>
                 </ul>   
@@ -127,7 +127,7 @@
                                 <i class="fas {% if category == 'success' %}fa-check-circle{% elif category == 'danger' %}fa-exclamation-circle{% else %}fa-info-circle{% endif %} me-2"></i>
                                 {{ message }}
                             </div>
-                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Đóng"></button>
                         </div>
                     </div>
                 {% endfor %}

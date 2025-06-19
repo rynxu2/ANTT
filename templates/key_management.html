@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Key Management - RSA Network Guard{% endblock %}
+{% block title %}Quản lý khóa - Mạng chuyển file CV{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -13,7 +13,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-network-wired"></i>
                             </div>
-                            <h6 class="step-title">IP Verification</h6>
+                            <h6 class="step-title">Xác thực IP</h6>
                         </div>
                     </div>
                     <div class="col">
@@ -21,7 +21,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-key"></i>
                             </div>
-                            <h6 class="step-title">Key Generation</h6>
+                            <h6 class="step-title">Tạo khóa</h6>
                         </div>
                     </div>
                     <div class="col">
@@ -29,7 +29,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-server"></i>
                             </div>
-                            <h6 class="step-title">Select Host</h6>
+                            <h6 class="step-title">Chọn Host</h6>
                         </div>
                     </div>
                     <div class="col">
@@ -37,7 +37,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-upload"></i>
                             </div>
-                            <h6 class="step-title">Secure Upload</h6>
+                            <h6 class="step-title">Tải lên an toàn</h6>
                         </div>
                     </div>
                     <div class="col">
@@ -45,7 +45,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-check-circle"></i>
                             </div>
-                            <h6 class="step-title">Verification</h6>
+                            <h6 class="step-title">Xác nhận</h6>
                         </div>
                     </div>
                 </div>
@@ -59,7 +59,7 @@
                         <div class="d-flex align-items-center justify-content-between">
                             <h4 class="mb-0">
                                 <i class="fas fa-key text-primary me-2"></i>
-                                Key Management
+                                Quản lý khóa
                             </h4>
                         </div>
                     </div>
@@ -71,14 +71,14 @@
                                 <div class="key-section">
                                     <h5 class="mb-3">
                                         <i class="fas fa-lock-open text-success me-2"></i>
-                                        Public Key
+                                        Khóa công khai
                                     </h5>
                                     <div class="position-relative">
                                         <pre class="bg-light rounded p-3" style="max-height: 200px; overflow-y: auto;"><code id="publicKey">{{ public_key }}</code></pre>
                                         <button class="btn btn-sm btn-primary position-absolute top-0 end-0 m-2" 
                                                 onclick="copyToClipboard('publicKey')" 
                                                 data-bs-toggle="tooltip" 
-                                                data-bs-title="Copy to clipboard">
+                                                data-bs-title="Sao chép vào clipboard">
                                             <i class="fas fa-copy"></i>
                                         </button>
                                     </div>
@@ -90,7 +90,7 @@
                                 <div class="key-section">
                                     <h5 class="mb-3">
                                         <i class="fas fa-lock text-danger me-2"></i>
-                                        Private Key
+                                        Khóa bí mật
                                     </h5>
                                     <div class="position-relative">
                                         <div class="private-key-container">
@@ -100,14 +100,14 @@
                                             <div class="key-overlay d-flex align-items-center justify-content-center">
                                                 <button class="btn btn-warning show-private-key">
                                                     <i class="fas fa-eye me-2"></i>
-                                                    Show Private Key
+                                                    Hiện khóa bí mật
                                                 </button>
                                             </div>
                                         </div>
                                         <button class="btn btn-sm btn-primary position-absolute top-0 end-0 m-2" 
                                                 onclick="copyToClipboard('privateKey')"
                                                 data-bs-toggle="tooltip" 
-                                                data-bs-title="Copy to clipboard">
+                                                data-bs-title="Sao chép vào clipboard">
                                             <i class="fas fa-copy"></i>
                                         </button>
                                     </div>
@@ -118,8 +118,8 @@
                             <div class="col-12 mt-4">
                                 <div class="alert alert-warning">
                                     <i class="fas fa-exclamation-triangle me-2"></i>
-                                    <strong>Important:</strong> Your private key should be kept secure and never shared with anyone. 
-                                    It will be used to decrypt files sent to you.
+                                    <strong>Quan trọng:</strong> Khóa bí mật của bạn cần được bảo mật tuyệt đối và không chia sẻ cho bất kỳ ai. 
+                                    Khóa này sẽ dùng để giải mã các file gửi đến bạn.
                                 </div>
                             </div>
 
@@ -127,10 +127,10 @@
                             <div class="col-12 mt-3">
                                 <a href="{{ url_for('sender_select_host') }}" class="btn btn-primary">
                                     <i class="fas fa-angle-right me-2"></i>
-                                    Continue
+                                    Tiếp tục
                                 </a>
                                 <small class="text-muted ms-3">
-                                    Warning: Regenerating keys will invalidate all previous file transfers
+                                    Cảnh báo: Tạo lại khóa mới sẽ làm vô hiệu hóa các file đã gửi trước đó
                                 </small>
                             </div>
                         </div>
@@ -140,9 +140,9 @@
                             <div class="mb-4">
                                 <i class="fas fa-key text-muted fa-3x"></i>
                             </div>
-                            <h5 class="text-muted">No Keys Generated</h5>
+                            <h5 class="text-muted">Chưa có khóa nào được tạo</h5>
                             <p class="text-muted mb-4">
-                                You need to generate RSA keys to start sending files securely.
+                                Bạn cần tạo khóa RSA để bắt đầu gửi file an toàn.
                             </p>
                         </div>
                         {% endif %}
@@ -204,9 +204,9 @@ function copyToClipboard(elementId) {
     const text = element.textContent;
     
     navigator.clipboard.writeText(text).then(() => {
-        showAlert('success', 'Copied to clipboard!');
+        showAlert('success', 'Đã sao chép vào clipboard!');
     }).catch(() => {
-        showAlert('danger', 'Failed to copy text.');
+        showAlert('danger', 'Sao chép văn bản thất bại.');
     });
 }
 

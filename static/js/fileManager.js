@@ -42,6 +42,49 @@ export class FileManager {
             const tr = this.createFileRow(data);
             tbody.insertBefore(tr, tbody.firstChild);
         }
+
+        const stats = document.querySelectorAll('#received-files-container .stat-card .stat-info strong');
+        if (stats) {
+            stats.forEach((el, index) => {
+                let oldValue = parseInt(el.textContent.replace(' Bytes', '')) || 0;
+                switch (index) {
+                    case 0:
+                        el.textContent = (parseInt(el.textContent) || 0) + 1;
+                        break;
+                    case 1:
+                        el.textContent = formatFileSize(this.parseSizeToBytes(oldValue) + data.file_size);
+                        break;
+                    case 2:
+                        break;
+                    default:
+                        break;
+                }
+            });
+        }
+    }
+
+    parseSizeToBytes(sizeStr) {
+        const units = {
+            b: 1,
+            kb: 1024,
+            mb: 1024 ** 2,
+            gb: 1024 ** 3,
+            tb: 1024 ** 4
+        };
+        
+        try {
+            const regex = /^([\d.]+)\s*(b|kb|mb|gb|tb)$/i;
+            const match = sizeStr.trim().toLowerCase().match(regex);
+
+            if (!match) return sizeStr;
+        } catch (e) {
+            return sizeStr;
+        }
+
+        const value = parseFloat(match[1]);
+        const unit = match[2];
+
+        return Math.round(value * units[unit]);
     }
 
     createFileTable() {
@@ -51,11 +94,11 @@ export class FileManager {
         table.innerHTML = `
             <thead>
                 <tr>
-                    <th style="width: 35%">File Name</th>
-                    <th style="width: 20%">Sender</th>
-                    <th style="width: 15%">Size</th>
-                    <th style="width: 15%">Status</th>
-                    <th style="width: 15%" class="text-end">Actions</th>
+                    <th style="width: 35%">Tên file</th>
+                    <th style="width: 20%">Người gửi</th>
+                    <th style="width: 15%">Dung lượng</th>
+                    <th style="width: 15%">Trạng thái</th>
+                    <th style="width: 15%" class="text-end">Hành động</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -69,7 +112,7 @@ export class FileManager {
         tr.dataset.sessionToken = data.session_token;
         tr.dataset.fileId = data.id;
 
-        const formattedDate = new Date(data.created_at).toLocaleString('en-US', {
+        const formattedDate = new Date(data.created_at).toLocaleString('vi-VN', {
             year: 'numeric', month: '2-digit', day: '2-digit',
             hour: '2-digit', minute: '2-digit'
         });
@@ -93,7 +136,7 @@ export class FileManager {
             <td>${formatFileSize(data.file_size)}</td>
             <td>
                 <span class="status-badge status-pending">
-                    <i class="fas fa-clock me-1"></i> Pending
+                    <i class="fas fa-clock me-1"></i> Đang chờ
                 </span>
             </td>
             <td class="text-end">
@@ -103,14 +146,14 @@ export class FileManager {
                             data-session-token="${data.session_token}"
                             data-file-id="${data.id}"
                             data-bs-toggle="tooltip"
-                            data-bs-title="Verify File">
+                            data-bs-title="Xác thực file">
                         <i class="fas fa-check"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-primary download-btn"
                             data-session-token="${data.session_token}"
                             data-file-id="${data.id}"
                             data-bs-toggle="tooltip"
-                            data-bs-title="Download Encrypted File">
+                            data-bs-title="Tải file mã hóa">
                         <i class="fas fa-lock"></i>
                     </button>
                 </div>
@@ -139,7 +182,7 @@ export class FileManager {
     }
 
     incrementVerifiedCount() {
-        const el = document.querySelector('.stat-card-completed');
+        const el = document.querySelector('#received-files-container .row .col-md-3:last-child strong');
         if (!el) return;
         el.textContent = (parseInt(el.textContent) || 0) + 1;
     }
@@ -149,11 +192,11 @@ export class FileManager {
         if (!statusCell) return;
 
         const config = {
-            verified: ['check-circle', 'Verified'],
-            downloaded: ['download', 'Downloaded'],
-            failed: ['times-circle', 'Failed'],
-            pending: ['clock', 'Pending']
-        }[status] || ['question-circle', 'Unknown'];
+            verified: ['check-circle', 'Đã xác thực'],
+            downloaded: ['download', 'Đã tải về'],
+            failed: ['times-circle', 'Lỗi'],
+            pending: ['clock', 'Đang chờ']
+        }[status] || ['question-circle', 'Không xác định'];
 
         const [icon, text] = config;
 
@@ -176,14 +219,14 @@ export class FileManager {
                             data-session-token="${fileRow.dataset.sessionToken}"
                             data-file-id="${fileRow.dataset.fileId}"
                             data-bs-toggle="tooltip" 
-                            data-bs-title="View Verification Details">
+                            data-bs-title="Xem chi tiết xác thực">
                         <i class="fas fa-shield-alt"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-primary download-btn"
                             data-session-token="${fileRow.dataset.sessionToken}"
                             data-file-id="${fileRow.dataset.fileId}"
                             data-bs-toggle="tooltip"
-                            data-bs-title="Download Decrypted File">
+                            data-bs-title="Tải file đã giải mã">
                         <i class="fas fa-download"></i>
                     </button>
                 </div>`;
@@ -195,14 +238,14 @@ export class FileManager {
                             data-session-token="${fileRow.dataset.sessionToken}"
                             data-file-id="${fileRow.dataset.fileId}"
                             data-bs-toggle="tooltip" 
-                            data-bs-title="View Verification Details">
+                            data-bs-title="Xem chi tiết xác thực">
                         <i class="fas fa-exclamation-triangle"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-primary download-btn"
                             data-session-token="${fileRow.dataset.sessionToken}"
                             data-file-id="${fileRow.dataset.fileId}"
                             data-bs-toggle="tooltip"
-                            data-bs-title="Download Encrypted File">
+                            data-bs-title="Tải file mã hóa">
                         <i class="fas fa-lock"></i>
                     </button>
                 </div>`;

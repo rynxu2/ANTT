@@ -7,11 +7,11 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">
                     <i class="fas fa-server me-2"></i>
-                    Manage Hosts
+                    Quản lý Host
                 </h4>
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addHostModal">
                     <i class="fas fa-plus me-2"></i>
-                    Add New Host
+                    Thêm Host mới
                 </button>
             </div>
             <div class="card-body">
@@ -28,12 +28,12 @@
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Name</th>
-                                <th>IP Address</th>
-                                <th>Description</th>
-                                <th>Public Key Status</th>
-                                <th>Created At</th>
-                                <th>Actions</th>
+                                <th>Tên Host</th>
+                                <th>Địa chỉ IP</th>
+                                <th>Mô tả</th>
+                                <th>Trạng thái Public Key</th>
+                                <th>Ngày tạo</th>
+                                <th>Hành động</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -41,25 +41,18 @@
                             <tr>
                                 <td>{{ host.name }}</td>
                                 <td><code>{{ host.ip_address }}</code></td>
-                                <td>{{ host.description or 'No description' }}</td>
-                                <td>                                    
-                                    {% if host.public_key %}
-                                    <span class="badge bg-success" data-bs-toggle="tooltip" title="This host can receive encrypted files">
+                                <td>{{ host.description or 'Không có mô tả' }}</td>
+                                <td>
+                                    <span class="badge bg-success" data-bs-toggle="tooltip" title="Host này có thể nhận file được mã hóa">
                                         <i class="fas fa-key me-1"></i>
-                                        Ready for Transfer
+                                        Sẵn sàng nhận file
                                     </span>
-                                    {% else %}
-                                    <span class="badge bg-warning" data-bs-toggle="tooltip" title="RSA keys will be generated automatically">
-                                        <i class="fas fa-spinner fa-spin me-1"></i>
-                                        Generating Keys...
-                                    </span>
-                                    {% endif %}
                                 </td>
                                 <td>{{ host.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                                 <td>                                    
                                     <form action="{{ url_for('delete_host', host_id=host.id) }}" method="POST" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this host?')">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Bạn có chắc muốn xóa host này?')">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </form>
@@ -72,7 +65,7 @@
                 {% else %}
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle me-2"></i>
-                    No hosts have been added yet. Click the "Add New Host" button to add one.
+                    Chưa có host nào được thêm. Nhấn "Thêm Host mới" để tạo mới.
                 </div>
                 {% endif %}
             </div>
@@ -87,44 +80,44 @@
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title" id="addHostModalLabel">
                     <i class="fas fa-server me-2"></i>
-                    Create Receiving Point
+                    Tạo điểm nhận file
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng"></button>
             </div>            <form action="{{ url_for('add_host') }}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">                <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>What happens when you create a host:</strong>
+                        <strong>Khi bạn tạo host sẽ xảy ra:</strong>
                         <ul class="mb-0 mt-2">
-                            <li>A receiving point will be set up for your current IP address</li>
-                            <li>RSA keys will be automatically generated if you don't have them</li>
-                            <li>Your public key will be available for others to send you encrypted files</li>
-                            <li>Files sent to this host will be securely encrypted using your public key</li>
+                            <li>Một điểm nhận file sẽ được thiết lập cho địa chỉ IP hiện tại của bạn</li>
+                            <li>Khóa RSA sẽ được tự động tạo nếu bạn chưa có</li>
+                            <li>Public key của bạn sẽ sẵn sàng để người khác gửi file mã hóa</li>
+                            <li>Các file gửi đến host này sẽ được mã hóa an toàn bằng public key của bạn</li>
                         </ul>
                     </div>
                     <div class="mb-3">
-                        <label for="name" class="form-label">Host Name</label>
-                        <input type="text" class="form-control" id="name" name="name" placeholder="e.g., My Work Computer" required>
-                        <div class="form-text">A friendly name to identify this receiving point</div>
+                        <label for="name" class="form-label">Tên Host</label>
+                        <input type="text" class="form-control" id="name" name="name" placeholder="VD: Máy tính làm việc của tôi" required>
+                        <div class="form-text">Tên dễ nhớ để nhận diện điểm nhận file này</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">IP Address</label>
+                        <label class="form-label">Địa chỉ IP</label>
                         <div class="form-control">{{ client_ip }}</div>
                         <input type="hidden" name="ip_address" class="form-control" value="{{ client_ip }}">
-                        <div class="form-text">This is your current IP address</div>
+                        <div class="form-text">Đây là địa chỉ IP hiện tại của bạn</div>
                     </div>
                     <div class="mb-3">
-                        <label for="description" class="form-label">Description (Optional)</label>
+                        <label for="description" class="form-label">Mô tả (không bắt buộc)</label>
                         <textarea class="form-control" id="description" name="description" rows="3" 
-                                placeholder="e.g., Office desktop computer for receiving work files"></textarea>
-                        <div class="form-text">Add details to help others identify this receiving point</div>
+                                placeholder="VD: Máy tính văn phòng nhận file công việc"></textarea>
+                        <div class="form-text">Thêm chi tiết để dễ nhận diện điểm nhận file này</div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-plus me-2"></i>
-                        Create Host
+                        Tạo Host
                     </button>
                 </div>
             </form>

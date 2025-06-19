@@ -8,12 +8,12 @@
             <div class="page-header mb-4">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h2 class="mb-1">Host Request Management</h2>
+                        <h2 class="mb-1">Quản lý yêu cầu Host</h2>
                     </div>
                     <div class="d-flex align-items-center">
                         <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
                             <i class="fas fa-sync-alt me-1"></i>
-                            Refresh
+                            Làm mới
                         </button>
                     </div>
                 </div>
@@ -25,14 +25,14 @@
                     <div>
                         <h4 class="mb-0">
                             <i class="fas fa-user-plus me-2 text-primary"></i>
-                            Host Join Requests
+                            Yêu cầu tham gia Host
                         </h4>
-                        <p class="text-muted mb-0 small">Manage pending join requests from senders</p>
+                        <p class="text-muted mb-0 small">Quản lý các yêu cầu tham gia đang chờ từ người gửi</p>
                     </div>
                     <div class="d-flex align-items-center">
                         <span class="badge bg-primary pending-count rounded-pill">
                             <i class="fas fa-clock me-1"></i>
-                            {{ pending_requests|length }} Pending
+                            {{ pending_requests|length }} Đang chờ
                         </span>
                     </div>
                 </div>
@@ -55,14 +55,14 @@
                                         <div class="d-flex gap-2">
                                             <form action="{{ url_for('approve_join_request', request_id=request.id) }}" method="POST" class="approve-form">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <input type="hidden" name="message" value="Really!">
-                                                <button type="submit" class="btn btn-sm btn-light text-success px-3" title="Approve">
+                                                <input type="hidden" name="message" value="Đồng ý!">
+                                                <button type="submit" class="btn btn-sm btn-light text-success px-3" title="Duyệt">
                                                     <i class="fas fa-check"></i>
                                                 </button>
                                             </form>
                                             <form action="{{ url_for('reject_join_request', request_id=request.id) }}" method="POST" class="reject-form">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-light text-danger px-3" title="Reject">
+                                                <button type="submit" class="btn btn-sm btn-light text-danger px-3" title="Từ chối">
                                                     <i class="fas fa-times"></i>
                                                 </button>
                                             </form>
@@ -81,8 +81,8 @@
                         <div class="mb-3">
                             <i class="fas fa-inbox fa-3x text-muted"></i>
                         </div>
-                        <h5 class="text-muted">No Pending Requests</h5>
-                        <p class="text-muted mb-0">When users request to join your hosts, they will appear here.</p>
+                        <h5 class="text-muted">Không có yêu cầu chờ</h5>
+                        <p class="text-muted mb-0">Khi có người dùng yêu cầu tham gia host của bạn, yêu cầu sẽ xuất hiện tại đây.</p>
                     </div>
                     {% endif %}
                 </div>
@@ -95,14 +95,14 @@
                         <div>
                             <h4 class="mb-0">
                                 <i class="fas fa-check-circle me-2 text-success"></i>
-                                Approved Hosts
+                                Host đã duyệt
                             </h4>
-                            <p class="text-muted mb-0 small">View and manage approved host connections</p>
+                            <p class="text-muted mb-0 small">Xem và quản lý các kết nối host đã được duyệt</p>
                         </div>
                         {% if approved_hosts %}
                         <span class="badge bg-success rounded-pill">
                             <i class="fas fa-users me-1"></i>
-                            {{ approved_hosts|length }} Active
+                            {{ approved_hosts|length }} Đang hoạt động
                         </span>
                         {% endif %}
                     </div>
@@ -114,10 +114,10 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>IP Host</th>
-                                    <th>IP Address</th>
-                                    <th>Join Date</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
+                                    <th>Địa chỉ IP</th>
+                                    <th>Ngày tham gia</th>
+                                    <th>Trạng thái</th>
+                                    <th>Hành động</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -146,14 +146,14 @@
                                     <td>
                                         <span class="badge bg-success-subtle text-success border border-success-subtle">
                                             <i class="fas fa-circle me-1 small"></i>
-                                            Active
+                                            Đang hoạt động
                                         </span>
                                     </td>
                                     <td>
                                         <form action="{{ url_for('revoke_host_access', host_id=host.id) }}" method="POST" class="d-inline">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-outline-danger btn-sm" 
-                                                    onclick="return confirm('Are you sure you want to revoke access for this host?')">
+                                                    onclick="return confirm('Bạn có chắc muốn thu hồi quyền truy cập của host này?')">
                                                 <i class="fas fa-ban"></i>
                                             </button>
                                         </form>
@@ -168,8 +168,8 @@
                         <div class="mb-3">
                             <i class="fas fa-users-slash fa-3x text-muted"></i>
                         </div>
-                        <h5 class="text-muted">No Approved Hosts</h5>
-                        <p class="text-muted mb-0">Approved host connections will be listed here.</p>
+                        <h5 class="text-muted">Chưa có host nào được duyệt</h5>
+                        <p class="text-muted mb-0">Các kết nối host đã duyệt sẽ được hiển thị tại đây.</p>
                     </div>
                     {% endif %}
                 </div>

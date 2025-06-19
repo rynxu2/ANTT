@@ -330,8 +330,7 @@ def receiver_files():
     stats = {
         'total_files': len(received_files),
         'total_size': sum(f.file_size for f in received_files if f.file_size),
-        'unique_senders': len(set(f.sender_ip for f in received_files)),
-        'last_received': max((f.created_at for f in received_files), default=None)
+        'completed_files': len([f for f in received_files if f.status in [FILE_STATUS['VERIFIED'], FILE_STATUS['DOWNLOADED']]]),
     }
     
     return render_template('received_files.html',
@@ -898,7 +897,7 @@ def oauth2callback():
     if request.args.get('code'):
         try:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'client_secret_326222266772-h2pq8pcdj7a997a8pk05v3smkdm4c9m0.apps.googleusercontent.com.json',
+                'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
                 SCOPES
             )
             
@@ -919,7 +918,7 @@ def oauth2callback():
     
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            'client_secret_326222266772-h2pq8pcdj7a997a8pk05v3smkdm4c9m0.apps.googleusercontent.com.json',
+            'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
             SCOPES,
             redirect_uri=request.base_url
         )

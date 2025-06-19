@@ -12,7 +12,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-network-wired"></i>
                             </div>
-                            <h6 class="step-title">IP Verification</h6>
+                            <h6 class="step-title">Xác thực IP</h6>
                         </div>
                     </div>
                     <div class="col">
@@ -20,7 +20,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-key"></i>
                             </div>
-                            <h6 class="step-title">Key Generation</h6>
+                            <h6 class="step-title">Tạo khóa</h6>
                         </div>
                     </div>
                     <div class="col">
@@ -28,7 +28,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-server"></i>
                             </div>
-                            <h6 class="step-title">Select Host</h6>
+                            <h6 class="step-title">Chọn Host</h6>
                         </div>
                     </div>
                     <div class="col">
@@ -36,7 +36,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-upload"></i>
                             </div>
-                            <h6 class="step-title">Secure Upload</h6>
+                            <h6 class="step-title">Tải lên an toàn</h6>
                         </div>
                     </div>
                     <div class="col">
@@ -44,7 +44,7 @@
                             <div class="upload-step-icon">
                                 <i class="fas fa-check-circle"></i>
                             </div>
-                            <h6 class="step-title">Verification</h6>
+                            <h6 class="step-title">Xác thực</h6>
                         </div>
                     </div>
                 </div>
@@ -56,19 +56,19 @@
             <div class="card-header">
                 <h4 class="mb-0">
                     <i class="fas fa-server me-2"></i>
-                    Selected Destination Host
+                    Host đích đã chọn
                 </h4>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6">
-                        <p><strong>Host Name:</strong> {{ selected_host.name }}</p>
-                        <p><strong>IP Address:</strong> <code>{{ selected_host.ip_address }}</code></p>
+                        <p><strong>Tên Host:</strong> {{ selected_host.name }}</p>
+                        <p><strong>Địa chỉ IP:</strong> <code>{{ selected_host.ip_address }}</code></p>
                     </div>
                     <div class="col-md-6 text-md-end">
                         <a href="{{ url_for('sender_select_host') }}" class="btn btn-outline-primary">
                             <i class="fas fa-exchange-alt me-2"></i>
-                            Change Host
+                            Đổi Host
                         </a>
                     </div>
                 </div>
@@ -80,7 +80,7 @@
             <div class="card-header">
                 <h4 class="mb-0">
                     <i class="fas fa-upload me-2"></i>
-                    Upload File
+                    Tải file lên
                 </h4>
             </div>
             <div class="card-body">
@@ -92,7 +92,7 @@
                         <div class="btn-group w-100" role="group">
                             <input type="radio" class="btn-check" name="fileSource" id="localFile" value="local" checked>
                             <label class="btn btn-outline-primary" for="localFile">
-                                <i class="fas fa-hdd me-2"></i>Local File
+                                <i class="fas fa-hdd me-2"></i>Tệp cục bộ
                             </label>
                             
                             <input type="radio" class="btn-check" name="fileSource" id="driveFile" value="drive">
@@ -106,12 +106,12 @@
                     <div id="localUploadZone" class="mb-4">
                         <div class="upload-zone p-5 text-center border rounded">
                             <i class="fas fa-cloud-upload-alt display-4 text-muted mb-3"></i>
-                            <h5>Drag & Drop File Here</h5>
-                            <p class="text-muted">or</p>
+                            <h5>Kéo & thả file vào đây</h5>
+                            <p class="text-muted">hoặc</p>
                             <input type="file" id="fileInput" class="d-none" accept=".pdf,.doc,.docx">
                             <label for="fileInput" class="btn btn-primary">
                                 <i class="fas fa-folder-open me-2"></i>
-                                Browse Files
+                                Chọn file
                             </label>
                         </div>
                     </div>
@@ -120,17 +120,17 @@
                     <div id="driveUploadZone" class="mb-4 d-none">
                         <div class="drive-zone p-5 text-center border rounded">
                             <i class="fab fa-google-drive display-4 text-muted mb-3"></i>
-                            <h5>Select File from Google Drive</h5>
-                            <p class="text-muted">Click the button below to browse your Drive</p>
+                            <h5>Chọn file từ Google Drive</h5>
+                            <p class="text-muted">Nhấn nút bên dưới để duyệt Drive của bạn</p>
                             <button type="button" id="pickFromDrive" class="btn btn-primary">
                                 <i class="fab fa-google-drive me-2"></i>
-                                Pick from Drive
+                                Chọn từ Drive
                             </button>
                             
                             <div id="selectedDriveFile" class="mt-4 d-none">
                                 <div class="alert alert-info">
                                     <i class="fas fa-file me-2"></i>
-                                    Selected file: <span id="driveFileName"></span>
+                                    Đã chọn file: <span id="driveFileName"></span>
                                     <button type="button" class="btn-close float-end" id="clearDriveSelection"></button>
                                 </div>
                             </div>
@@ -141,14 +141,14 @@
                     <div id="fileDetails" class="d-none">
                         <div class="card">
                             <div class="card-body">
-                                <h5 class="mb-3">File Information</h5>
+                                <h5 class="mb-3">Thông tin file</h5>
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <p><strong>Name:</strong> <span id="fileName"></span></p>
-                                        <p><strong>Size:</strong> <span id="fileSize"></span></p>
+                                        <p><strong>Tên:</strong> <span id="fileName"></span></p>
+                                        <p><strong>Kích thước:</strong> <span id="fileSize"></span></p>
                                     </div>
                                     <div class="col-md-6">
-                                        <p><strong>Type:</strong> <span id="fileType"></span></p>
+                                        <p><strong>Loại:</strong> <span id="fileType"></span></p>
                                     </div>
                                 </div>
                             </div>                       
@@ -158,7 +158,7 @@
                     <div class="text-center mt-4">
                         <button type="submit" id="uploadBtn" class="btn btn-primary btn-lg">
                             <i class="fas fa-paper-plane me-2"></i>
-                            Start Secure Transfer
+                            Bắt đầu gửi an toàn
                         </button>
                     </div>
                 </form>
@@ -175,12 +175,12 @@
                 <!-- Success Information -->
                 <div id="successInfo" class="mt-4 d-none">
                     <div class="alert alert-success">
-                        <h5><i class="fas fa-check-circle me-2"></i>File Transfer Complete!</h5>
-                        <p class="mb-2">Your file has been securely encrypted and uploaded.</p>
+                        <h5><i class="fas fa-check-circle me-2"></i>Gửi file thành công!</h5>
+                        <p class="mb-2">File của bạn đã được mã hóa và tải lên an toàn.</p>
                         <hr>
                         <div class="row">                            
                             <div class="col-md-6">
-                                <h6>Security Information</h6>
+                                <h6>Thông tin bảo mật</h6>
                                 <p><strong>Session Token:</strong><br>
                                     <code id="sessionToken" class="d-block mb-2"></code></p>
                                 <p><strong>File Hash (SHA-512):</strong><br>
@@ -188,18 +188,18 @@
                                 <p><strong>Initialization Vector (IV):</strong><br>
                                     <code id="iv" class="d-block mb-2"></code></p>
                                 <details class="mb-3">
-                                    <summary><strong>Public Key (Used for Encryption)</strong></summary>
+                                    <summary><strong>Public Key (dùng để mã hóa)</strong></summary>
                                     <pre><code id="publicKey" class="d-block mt-2 small" style="white-space: pre-wrap;"></code></pre>
                                 </details>
-                                <p><small class="text-muted">Hash Algorithm: <span id="hashType"></span></small></p>
+                                <p><small class="text-muted">Thuật toán băm: <span id="hashType"></span></small></p>
                             </div>
                             <div class="col-md-6">
-                                <h6>Next Steps</h6>
-                                <p>The file is now encrypted and waiting for the recipient's verification.</p>
-                                <p>You can track the status in your dashboard.</p>
+                                <h6>Bước tiếp theo</h6>
+                                <p>File đã được mã hóa và chờ người nhận xác thực.</p>
+                                <p>Bạn có thể theo dõi trạng thái trong trang tổng quan.</p>
                                 <a href="{{ url_for('sender_dashboard') }}" class="btn btn-primary bg-primary">
                                     <i class="fas fa-tachometer-alt me-2"></i>
-                                    Go to Dashboard
+                                    Về trang tổng quan
                                 </a>
                             </div>
                         </div>
@@ -216,8 +216,8 @@
 <script src="https://accounts.google.com/gsi/client"></script>
 
 <script>
-    const API_KEY = 'AIzaSyB88FnEoQD59BrJWcwuSpc9XTQL7dYss2c';
-    const CLIENT_ID = '326222266772-h2pq8pcdj7a997a8pk05v3smkdm4c9m0.apps.googleusercontent.com';
+    const API_KEY = 'AIzaSyDvKGQ-dt0AWhHLHgYZ0CEGdvMZ3BkGmCo';
+    const CLIENT_ID = '326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 
     let accessToken = null;

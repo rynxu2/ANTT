@@ -10,14 +10,14 @@
                         <i class="fas fa-inbox"></i>
                     </div>
                     <div>
-                        <h4 class="mb-0">Received Files</h4>
-                        <p class="text-muted mb-0 small">Manage your incoming secure files</p>
+                        <h4 class="mb-0">File đã nhận</h4>
+                        <p class="text-muted mb-0 small">Quản lý các file bảo mật bạn đã nhận</p>
                     </div>
                 </div>
                 <div>
                     <a href="{{ url_for('receiver_hosts') }}" class="btn btn-primary">
                         <i class="fas fa-server me-2"></i>
-                        Manage Hosts
+                        Quản lý Host
                     </a>
                 </div>
             </div>
@@ -28,9 +28,9 @@
                 <div class="mb-4">                    
                     <form action="{{ url_for('receiver_files') }}" method="GET" class="row">
                         <div class="col-md-4">
-                            <label class="form-label fw-medium mb-2">Filter by Host</label>
+                            <label class="form-label fw-medium mb-2">Lọc theo Host</label>
                             <select class="form-select" id="hostSelect" name="host_id" onchange="this.form.submit()">
-                                <option value="">All Hosts</option>
+                                <option value="">Tất cả Host</option>
                                 {% for host in hosts %}
                                 <option value="{{ host.id }}" {% if selected_host_id == host.id %}selected{% endif %}>
                                     {{ host.name }} ({{ host.ip_address }})
@@ -47,11 +47,11 @@
                     <div class="card-header">
                         <h5 class="mb-0">
                             <i class="fas fa-chart-bar me-2"></i>
-                            Statistics
+                            Thống kê
                             {% if selected_host_id %}
-                                for {{ hosts|selectattr('id', 'eq', selected_host_id)|first|attr('name') }}
+                                cho {{ hosts|selectattr('id', 'eq', selected_host_id)|first|attr('name') }}
                             {% else %}
-                                for All Hosts
+                                cho tất cả Host
                             {% endif %}
                         </h5>
                     </div>
@@ -63,7 +63,7 @@
                                         <i class="fas fa-file-alt"></i>
                                     </div>
                                     <div class="stat-info">
-                                        <h6>Total Files</h6>
+                                        <h6>Tổng số file</h6>
                                         <strong>{{ stats.total_files }}</strong>
                                     </div>
                                 </div>
@@ -74,7 +74,7 @@
                                         <i class="fas fa-database"></i>
                                     </div>
                                     <div class="stat-info">
-                                        <h6>Total Size</h6>
+                                        <h6>Tổng dung lượng</h6>
                                         <strong>{{ stats.total_size | filesizeformat }}</strong>
                                     </div>
                                 </div>
@@ -82,22 +82,11 @@
                             <div class="col-md-3">
                                 <div class="stat-card">
                                     <div class="stat-icon">
-                                        <i class="fas fa-users"></i>
+                                        <i class="fas fa-circle-check"></i>
                                     </div>
                                     <div class="stat-info">
-                                        <h6>Unique Senders</h6>
-                                        <strong>{{ stats.unique_senders }}</strong>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="stat-card">
-                                    <div class="stat-icon">
-                                        <i class="fas fa-clock"></i>
-                                    </div>
-                                    <div class="stat-info">
-                                        <h6>Last Received</h6>
-                                        <strong>{{ stats.last_received.strftime('%Y-%m-%d') if stats.last_received else 'Never' }}</strong>
+                                        <h6>Số file hoàn thành</h6>
+                                        <strong>{{ stats.completed_files }}</strong>
                                     </div>
                                 </div>
                             </div>
@@ -111,11 +100,11 @@
                     <table id="table-received-files" class="table table-hover align-middle mb-0">
                         <thead>
                             <tr>
-                                <th style="width: 35%">File Name</th>
-                                <th style="width: 20%">Sender</th>
-                                <th style="width: 15%">Size</th>
-                                <th style="width: 15%">Status</th>
-                                <th style="width: 15%" class="text-end">Actions</th>
+                                <th style="width: 35%">Tên file</th>
+                                <th style="width: 20%">Người gửi</th>
+                                <th style="width: 15%">Dung lượng</th>
+                                <th style="width: 15%">Trạng thái</th>
+                                <th style="width: 15%" class="text-end">Hành động</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -147,22 +136,22 @@
                                     {% if file.status == 'verified' %}
                                         <span class="status-badge status-verified">
                                             <i class="fas fa-check-circle"></i>
-                                            Verified
+                                            Đã xác thực
                                         </span>
                                     {% elif file.status == 'failed' %}
                                         <span class="status-badge status-failed">
                                             <i class="fas fa-times-circle"></i>
-                                            Failed
+                                            Lỗi
                                         </span>
                                     {% elif file.status == 'downloaded' %}
                                         <span class="status-badge status-downloaded">
                                             <i class="fas fa-download"></i>
-                                            Downloaded
+                                            Đã tải về
                                         </span>
                                     {% else %}
                                         <span class="status-badge status-pending">
                                             <i class="fas fa-clock"></i>
-                                            Pending
+                                            Đang chờ
                                         </span>
                                     {% endif %}
                                 </td>
@@ -175,7 +164,7 @@
                                                 data-file-id="{{ file.id }}"
                                                 data-host-id="{{ file.receiver_ip }}"
                                                 data-bs-toggle="tooltip"
-                                                data-bs-title="Verify File">
+                                                data-bs-title="Xác thực file">
                                             <i class="fas fa-check"></i>
                                         </button>
                                         {% endif %}
@@ -185,7 +174,7 @@
                                                 data-file-id="{{ file.id }}"
                                                 data-host-id="{{ file.receiver_ip }}"
                                                 data-bs-toggle="tooltip" 
-                                                data-bs-title="View Verification Details">
+                                                data-bs-title="Xem chi tiết xác thực">
                                             <i class="fas fa-shield-alt"></i>
                                         </button>
                                         {% endif %}
@@ -193,7 +182,7 @@
                                                 data-session-token="{{ file.session_token }}"
                                                 data-file-id="{{ file.id }}"
                                                 data-bs-toggle="tooltip"
-                                                data-bs-title="{% if file.status == 'verified' or file.status == 'downloaded' %}Download Decrypted File{% else %}Download Encrypted File{% endif %}">
+                                                data-bs-title="{% if file.status == 'verified' or file.status == 'downloaded' %}Tải file đã giải mã{% else %}Tải file mã hóa{% endif %}">
                                             <i class="fas {% if file.status == 'verified' or file.status == 'downloaded' %}fa-download{% else %}fa-lock{% endif %}"></i>
                                         </button>
                                     </div>
@@ -208,8 +197,8 @@
                     <div class="empty-state-icon mb-3">
                         <i class="fas fa-inbox"></i>
                     </div>
-                    <h5 class="empty-state-title">No Files Yet</h5>
-                    <p class="empty-state-text mb-0">Files that are sent to you will appear here</p>
+                    <h5 class="empty-state-title">Chưa có file nào</h5>
+                    <p class="empty-state-text mb-0">Các file gửi đến bạn sẽ xuất hiện tại đây</p>
                 </div>
                 {% endif %}
             </div>
@@ -222,7 +211,7 @@
                     <div class="modal-header bg-primary text-white align-items-center">
                         <h5 class="modal-title d-flex align-items-center">
                             <i class="fas fa-shield-alt me-2"></i>
-                            File Verification Details
+                            Chi tiết xác thực file
                         </h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
@@ -230,20 +219,20 @@
                         <!-- File Information (Initial View) -->
                         <div class="verification-info" id="verification-info">
                             <div class="mb-4">
-                                <h6 class="fw-bold text-primary"><i class="fas fa-info-circle me-2"></i>File Information</h6>
+                                <h6 class="fw-bold text-primary"><i class="fas fa-info-circle me-2"></i>Thông tin file</h6>
                                 <div class="row g-3">
                                     <div class="col-md-6">
-                                        <p><strong>Filename:</strong><br>
+                                        <p><strong>Tên file:</strong><br>
                                             <span id="modal-filename" class="text-muted"></span></p>
                                     </div>
                                     <div class="col-md-6">
-                                        <p><strong>Upload Time:</strong><br>
+                                        <p><strong>Thời gian tải lên:</strong><br>
                                             <span id="modal-timestamp" class="text-muted"></span></p>
                                     </div>
                                 </div>
                             </div>
                             <div class="mb-4">
-                                <h6 class="fw-bold text-primary"><i class="fas fa-lock me-2"></i>Cryptographic Information</h6>
+                                <h6 class="fw-bold text-primary"><i class="fas fa-lock me-2"></i>Thông tin mã hóa</h6>
                                 <div class="row g-3">
                                     <div class="col-12">
                                         <p><strong>Initialization Vector (IV):</strong><br>
@@ -254,22 +243,22 @@
                                             <code id="modal-file-hash" class="d-block mb-2 p-2 bg-light rounded border word-wrap"></code></p>
                                     </div>
                                     <div class="col-12">
-                                        <p><strong>Metadata Signature:</strong><br>
+                                        <p><strong>Chữ ký số:</strong><br>
                                             <code id="modal-signature" class="d-block mb-2 p-2 bg-light rounded border word-wrap"></code></p>
                                     </div>
                                 </div>
                             </div>
                             <div class="mb-4">
-                                <h6 class="fw-bold text-primary"><i class="fas fa-user me-2"></i>Sender's Information</h6>
+                                <h6 class="fw-bold text-primary"><i class="fas fa-user me-2"></i>Thông tin người gửi</h6>
                                 <div class="row g-3">
                                     <div class="col-12">
-                                        <p><strong>IP Address:</strong><br>
+                                        <p><strong>Địa chỉ IP:</strong><br>
                                             <code id="modal-sender-ip" class="text-muted"></code></p>
                                     </div>
                                     <div class="col-12">
                                         <p><strong>Public Key:</strong></p>
                                         <details>
-                                            <summary class="text-primary" style="cursor: pointer">Show Public Key</summary>
+                                            <summary class="text-primary" style="cursor: pointer">Xem Public Key</summary>
                                             <pre><code id="modal-sender-key" class="d-block mt-2 p-2 bg-light rounded border small"></code></pre>
                                         </details>
                                     </div>
@@ -280,21 +269,21 @@
                         <!-- Step-by-Step Verification Process -->
                         <div class="verification-process d-none" id="verification-process">
                             <div class="verification-head text-center mb-4">
-                                <h5 class="fw-bold text-primary">File Verification Process</h5>
-                                <p class="text-muted">Please wait while we verify your file through multiple security checks</p>
+                                <h5 class="fw-bold text-primary">Quy trình xác thực file</h5>
+                                <p class="text-muted">Vui lòng chờ trong khi hệ thống kiểm tra bảo mật file của bạn</p>
                             </div>
                             <!-- Tổng quan trạng thái -->
                             <div class="mb-4 status-loader">
                                 <div class="d-flex justify-content-center align-items-center gap-3">
                                     <div id="overall-status" class="badge bg-secondary px-3 py-2 fs-6">
-                                        <i class="fas fa-spinner fa-spin me-2"></i>Verifying...
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Đang xác thực...
                                     </div>
                                 </div>
                             </div>
                             <div class="verification-success text-center d-none" id="verification-success">
                                 <i class="fas fa-check-circle text-success display-1 mb-3 animate__animated animate__tada"></i>
-                                <h5 class="text-success">Verification Successful!</h5>
-                                <p>The file has been verified and is safe to download.</p>
+                                <h5 class="text-success">Xác thực thành công!</h5>
+                                <p>File đã được xác thực và an toàn để tải về.</p>
                             </div>
                             <!-- Verification Steps (grouped, with animation) -->
                             <div class="verification-steps row row-cols-1 row-cols-md-2 g-4">
@@ -461,27 +450,27 @@
                         <!-- Error State -->
                         <div class="verification-error text-center d-none" id="verification-error">
                             <i class="fas fa-times-circle text-danger display-1 mb-3 animate__animated animate__shakeX"></i>
-                            <h5 class="text-danger">Verification Failed</h5>
-                            <p id="verification-error-message">An error occurred during verification.</p>
+                            <h5 class="text-danger">Xác thực thất bại</h5>
+                            <p id="verification-error-message">Đã xảy ra lỗi trong quá trình xác thực.</p>
                             <div class="verification-error-details mt-4">
                                 <div class="alert alert-danger">
-                                    <strong>Security Warning:</strong> This file failed one or more security checks and should not be trusted.
+                                    <strong>Cảnh báo bảo mật:</strong> File này không vượt qua kiểm tra bảo mật và không nên tin tưởng.
                                 </div>
                                 <div class="alert alert-warning mt-2">
-                                    <strong>Tip:</strong> Please contact the sender or try verifying another file.
+                                    <strong>Gợi ý:</strong> Vui lòng liên hệ người gửi hoặc thử xác thực file khác.
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-0">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
                         <button type="button" id="proceedVerifyBtn" class="btn btn-success" data-session-token="">
                             <i class="fas fa-check me-2"></i>
-                            Proceed with Verification
+                            Tiến hành xác thực
                         </button>
                         <button type="button" id="downloadVerifiedBtn" class="btn btn-primary d-none">
                             <i class="fas fa-download me-2"></i>
-                            Download File
+                            Tải file
                         </button>
                     </div>
                 </div>

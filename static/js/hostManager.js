@@ -39,7 +39,7 @@ export class HostManager {
                             ${data.description ? `<br>${data.description}` : ''}
                         </p>
                         <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">Added by ${data.created_by}</small>
+                            <small class="text-muted">Thêm bởi ${data.created_by}</small>
                             <button class="btn btn-sm btn-outline-danger delete-recipient" data-id="${data.id}">
                                 <i class="fas fa-trash"></i>
                             </button>
@@ -53,7 +53,7 @@ export class HostManager {
         const deleteBtn = hostsList.querySelector(`[data-id="${data.id}"]`);
         if (deleteBtn) {
             deleteBtn.addEventListener('click', () => {
-                if (confirm('Are you sure you want to delete this recipient?')) {
+                if (confirm('Bạn có chắc muốn xóa người nhận này?')) {
                     deleteRecipient(data.id);
                 }
             });
@@ -83,13 +83,13 @@ export class HostManager {
                                     <input type="hidden" name="message" value="Hello! ${this.getClientIP()}">
                                     <button type="submit" class="btn btn-outline-primary w-100">
                                         <i class="fas fa-paper-plane me-1"></i>
-                                        Request Access
+                                        Gửi yêu cầu truy cập
                                     </button>
                                 </form>
                             ` : `
                                 <button class="btn btn-warning w-100" disabled>
                                     <i class="fas fa-exclamation-triangle me-2"></i>
-                                    No Public Key Available
+                                    Chưa có Public Key
                                 </button>
                             `}
                         </div>
@@ -128,11 +128,11 @@ export class HostManager {
                     <div class="text-center">
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle me-2"></i>
-                            No hosts are available for file transfer. Ask your intended recipient to register as a host first.
+                            Không có host nào sẵn sàng để gửi file. Hãy yêu cầu người nhận đăng ký làm host trước.
                         </div>
                         <img src="{{ url_for('static', filename='images/empty-hosts.svg') }}" alt="No hosts" class="img-fluid mb-3" style="max-width: 200px;">
                         <p class="text-muted">
-                            To send files, you need a recipient who has registered as a host. Once they register, their host will appear here.
+                            Để gửi file, bạn cần người nhận đã đăng ký làm host. Khi họ đăng ký, host của họ sẽ xuất hiện tại đây.
                         </p>
                     </div>
                 `;
