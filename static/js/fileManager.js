@@ -97,7 +97,7 @@ export class FileManager {
                     <th style="width: 35%">Tên file</th>
                     <th style="width: 20%">Người gửi</th>
                     <th style="width: 15%">Dung lượng</th>
-                    <th style="width: 15%">Trạng thái</th>
+                    <th style="width: 20%">Trạng thái</th>
                     <th style="width: 15%" class="text-end">Hành động</th>
                 </tr>
             </thead>
@@ -182,9 +182,17 @@ export class FileManager {
     }
 
     incrementVerifiedCount() {
-        const el = document.querySelector('#received-files-container .row .col-md-3:last-child strong');
-        if (!el) return;
-        el.textContent = (parseInt(el.textContent) || 0) + 1;
+        if (window.location.pathname.includes('/receiver_files')) {
+            const el = document.querySelector('#received-files-container .row .col-md-4:last-child strong');
+            if (!el) return;
+            el.textContent = (parseInt(el.textContent) || 0) + 1;
+        };
+        if (window.location.pathname.includes('/sender')) {
+            const verifiedCountEl = document.querySelector('.stat-card-completed');
+            if (verifiedCountEl) {
+                verifiedCountEl.textContent = (parseInt(verifiedCountEl.textContent) || 0) + 1;
+            }
+        };
     }
 
     updateStatusBadge(fileRow, status) {

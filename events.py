@@ -68,20 +68,20 @@ def notify_new_file(file_data):
         logging.error(f"Error in notify_new_file: {str(e)}")
 
 def notify_status_change(session_data):
-    """Emit event when a file's status changes"""
+    """Emit event when a file's status changes (only to host/receiver)"""
     if not session_data:
         logging.error("notify_status_change called with invalid session_data")
         return
-    
+
     if not hasattr(session_data, 'session_token') or not session_data.session_token:
         logging.error("Session data missing session_token")
         return
-        
+
     try:
         if not session_data.updated_at:
             session_data.updated_at = datetime.utcnow()
             db.session.commit()
-        
+
         client_ips = [ip for ip in [session_data.sender_ip, session_data.receiver_ip] if ip]
         if not client_ips:
             logging.error("No valid client IPs found in session data")
@@ -108,14 +108,13 @@ def notify_status_change(session_data):
             except Exception as client_error:
                 logging.error(f"Error notifying client {client_ip}: {str(client_error)}")
                 notify_action_end(client_ip, 'status-update', success=False, error_message=str(client_error))
-            
+
     except Exception as e:
         logging.error(f"Error in notify_status_change: {str(e)}")
-        for client_ip in client_ips:
-            try:
-                notify_action_end(client_ip, 'status-update', success=False, error_message=str(e))
-            except:
-                pass
+        try:
+            notify_action_end(client_ip, 'status-update', success=False, error_message=str(e))
+        except:
+            pass
 
 def emit_status_change(file):
     """

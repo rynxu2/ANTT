@@ -897,7 +897,7 @@ def oauth2callback():
     if request.args.get('code'):
         try:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
+                'client_secret_287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com.json',
                 SCOPES
             )
             
@@ -918,7 +918,7 @@ def oauth2callback():
     
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
+            'client_secret_287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com.json',
             SCOPES,
             redirect_uri=request.base_url
         )
@@ -1056,10 +1056,8 @@ def verify_integrity(session_token):
 def complete_verification(session_token):
     upload_session = UploadSession.query.filter_by(session_token=session_token).first()
     try:
-        print(f"Before status update: {upload_session.status}")
         upload_session.update_status(FILE_STATUS['VERIFIED'])
         db.session.commit()
-        print(f"After status update: {upload_session.status}")
         notify_status_change(upload_session)
         return jsonify({'message': 'File verified and completed'})
     except Exception as e:
