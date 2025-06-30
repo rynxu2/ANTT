@@ -74,7 +74,7 @@
                                         Khóa công khai
                                     </h5>
                                     <div class="position-relative">
-                                        <pre class="bg-light rounded p-3" style="max-height: 200px; overflow-y: auto;"><code id="publicKey">{{ public_key }}</code></pre>
+                                        <pre class="bg-light rounded p-3" style="max-height: 200px; overflow-y: auto;"><code id="publicKey"></code></pre>
                                         <button class="btn btn-sm btn-primary position-absolute top-0 end-0 m-2" 
                                                 onclick="copyToClipboard('publicKey')" 
                                                 data-bs-toggle="tooltip" 
@@ -85,7 +85,7 @@
                                 </div>
                             </div>
 
-                            <!-- Private Key -->
+                            <!-- Private Key (from localStorage) -->
                             <div class="col-md-6">
                                 <div class="key-section">
                                     <h5 class="mb-3">
@@ -95,7 +95,7 @@
                                     <div class="position-relative">
                                         <div class="private-key-container">
                                             <pre class="bg-light rounded p-3" style="max-height: 200px; overflow-y: auto;">
-                                                <code id="privateKey" class="blur-text">{{ private_key }}</code>
+                                                <code id="privateKey" class="blur-text"></code>
                                             </pre>
                                             <div class="key-overlay d-flex align-items-center justify-content-center">
                                                 <button class="btn btn-warning show-private-key">
@@ -180,8 +180,55 @@
     pointer-events: none;
 }
 </style>
-
 <script>
+const PRIVATE_KEY_STORAGE_KEY = 'rsa_sender_private_key_pem';
+const PUBLIC_KEY_STORAGE_KEY = 'rsa_sender_public_key_pem';
+
+async function generateRSAKeyPair() {
+    const keyPair = await window.crypto.subtle.generateKey(
+        {
+            name: 'RSA-OAEP',
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([1, 0, 1]),
+            hash: 'SHA-256',
+        },
+        true,
+        ['encrypt', 'decrypt']
+    );
+    const publicKey = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+    const privateKey = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+    return {
+        publicKeyPem: pemEncode(publicKey, 'PUBLIC KEY'),
+        privateKeyPem: pemEncode(privateKey, 'PRIVATE KEY'),
+    };
+}
+
+function pemEncode(buffer, label) {
+    const base64 = window.btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    const lines = base64.match(/.{1,64}/g).join('\n');
+    return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----`;
+}
+
+function savePrivateKeyToLocalStorage(pem) {
+    localStorage.setItem(PRIVATE_KEY_STORAGE_KEY, pem);
+}
+function getPrivateKeyFromLocalStorage() {
+    return localStorage.getItem(PRIVATE_KEY_STORAGE_KEY);
+}
+function savePublicKeyToLocalStorage(pem) {
+    localStorage.setItem(PUBLIC_KEY_STORAGE_KEY, pem);
+}
+function getPublicKeyFromLocalStorage() {
+    return localStorage.getItem(PUBLIC_KEY_STORAGE_KEY);
+}
+
+function updateKeyUI() {
+    const privateKey = getPrivateKeyFromLocalStorage();
+    const publicKey = getPublicKeyFromLocalStorage();
+    document.getElementById('publicKey').textContent = publicKey ? publicKey : 'Chưa có khóa công khai trong trình duyệt.';
+    document.getElementById('privateKey').textContent = privateKey ? privateKey : 'Chưa có khóa bí mật trong trình duyệt.';
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     tooltips.forEach(tooltip => new bootstrap.Tooltip(tooltip));
@@ -197,6 +244,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 30000);
         });
     }
+
+    updateKeyUI();
 });
 
 function copyToClipboard(elementId) {

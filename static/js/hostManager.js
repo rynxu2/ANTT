@@ -77,7 +77,7 @@ export class HostManager {
                         </p>
                         ${data.description ? `<p class="card-text">${data.description}</p>` : ''}
                         <div class="mt-3">
-                            ${data.public_key ? `
+                            ${data.has_keys ? `
                                 <form action="/host/${data.id}/request_join" method="POST" class="join-host-form">
                                     <input type="hidden" name="csrf_token" value="${document.querySelector('meta[name="csrf-token"]')?.content}">
                                     <input type="hidden" name="message" value="Hello! ${this.getClientIP()}">

@@ -74,7 +74,7 @@
                                 <p class="card-text">{{ host.description }}</p>
                                 {% endif %}
                                 <div class="mt-3 status-area">                                          
-                                    {% if host.public_key %}
+                                    {% if host.has_keys %}
                                     {% if host_requests.get(host.id) and host_requests[host.id].get(host.name) %}
                                         {% set request = host_requests[host.id][host.name] %}
                                         {% if request.status == 'approved' %}

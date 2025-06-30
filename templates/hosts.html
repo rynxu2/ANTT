@@ -85,7 +85,9 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng"></button>
             </div>            <form action="{{ url_for('add_host') }}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-body">                <div class="alert alert-info">
+                <input type="hidden" name="has_keys">
+                <div class="modal-body">                
+                    <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
                         <strong>Khi bạn tạo host sẽ xảy ra:</strong>
                         <ul class="mb-0 mt-2">
@@ -128,6 +130,81 @@
 
 {% block scripts %}
 <script>
+    const PRIVATE_KEY_STORAGE_KEY = 'rsa_host_private_key_pem';
+    const PUBLIC_KEY_STORAGE_KEY = 'rsa_host_public_key_pem';
+
+    async function generateRSAKeyPair() {
+        const keyPair = await window.crypto.subtle.generateKey(
+            {
+                name: 'RSA-OAEP',
+                modulusLength: 2048,
+                publicExponent: new Uint8Array([1, 0, 1]),
+                hash: 'SHA-256',
+            },
+            true,
+            ['encrypt', 'decrypt']
+        );
+        const publicKey = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+        const privateKey = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+        return {
+            publicKeyPem: pemEncode(publicKey, 'PUBLIC KEY'),
+            privateKeyPem: pemEncode(privateKey, 'PRIVATE KEY'),
+        };
+    }
+
+    function pemEncode(buffer, label) {
+        const base64 = window.btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const lines = base64.match(/.{1,64}/g).join('\n');
+        return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----`;
+    }
+
+    function savePrivateKeyToLocalStorage(host_name, pem) {
+        localStorage.setItem(PRIVATE_KEY_STORAGE_KEY+host_name, pem);
+    }
+    function getPrivateKeyFromLocalStorage(host_name) {
+        return localStorage.getItem(PRIVATE_KEY_STORAGE_KEY+host_name);
+    }
+    function savePublicKeyToLocalStorage(host_name, pem) {
+        localStorage.setItem(PUBLIC_KEY_STORAGE_KEY+host_name, pem);
+    }
+    function getPublicKeyFromLocalStorage(host_name) {
+        return localStorage.getItem(PUBLIC_KEY_STORAGE_KEY+host_name);
+    }
+    function getKeysFromLocalStorage(host_name) {
+        const private_key = localStorage.getItem(PRIVATE_KEY_STORAGE_KEY+host_name);
+        const public_key = localStorage.getItem(PUBLIC_KEY_STORAGE_KEY+host_name);
+        return private_key && public_key ? { privateKey: private_key, publicKey: public_key } : null;
+    }
+
+    async function ensureKeys(host_name) {
+        let keys = getKeysFromLocalStorage(host_name);
+        if (!keys) {
+            const { publicKeyPem, privateKeyPem } = await generateRSAKeyPair();
+            savePrivateKeyToLocalStorage(host_name, privateKeyPem);
+            savePublicKeyToLocalStorage(host_name, publicKeyPem);
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            await fetch('/api/register_key/receiver', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    host_name: host_name
+                })
+            })
+            .then(response => {
+                var addHostForm = document.querySelector('#addHostModal form');
+                if (response.ok) {
+                    addHostForm.querySelector('input[name="has_keys"]').value = 'true';
+                } else {
+                    addHostForm.querySelector('input[name="has_keys"]').value = 'false';
+                }
+            });
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
@@ -138,6 +215,17 @@
             setTimeout(function() {
                 location.reload();
             }, 5000);
+        }
+
+        var addHostForm = document.querySelector('#addHostModal form');
+        if (addHostForm) {
+            addHostForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                var hostNameInput = addHostForm.querySelector('input[name="name"]');
+                var hostName = hostNameInput ? hostNameInput.value : '';
+                await ensureKeys(hostName);
+                addHostForm.submit();
+            });
         }
     });
 </script>

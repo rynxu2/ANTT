@@ -62,30 +62,6 @@ def get_client_ip():
     except ValueError:
         return None
 
-def ensure_sender_keys():
-    """Ensure the current IP has RSA keys, create if not exists"""
-    client_ip = get_client_ip()
-    ip_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
-    
-    if not ip_mapping:
-        try:
-            public_key_pem, private_key_pem = generate_rsa_keypair()
-            
-            new_mapping = IPUserKeyMapping(
-                ip_address=client_ip,
-                public_key_pem=public_key_pem,
-                private_key_pem=private_key_pem
-            )
-            
-            db.session.add(new_mapping)
-            db.session.commit()
-            return True
-        except Exception as e:
-            app.logger.error(f"Error generating keys for IP {client_ip}: {str(e)}")
-            return False
-    
-    return True
-
 @app.route('/')
 def index():
     """Landing page to choose between Receiver and Sender mode"""
@@ -117,9 +93,6 @@ def sender_dashboard():
     """Dashboard for sender mode"""
     client_ip = get_client_ip()
     
-    if not ensure_sender_keys():
-        flash('Error generating RSA keys. Please try again.', 'error')
-    
     all_transfers = UploadSession.query.filter_by(sender_ip=client_ip).all()
     
     recent_transfers = UploadSession.query.filter_by(
@@ -137,6 +110,60 @@ def sender_dashboard():
     return render_template('sender_dashboard.html', 
                          recent_transfers=recent_transfers,
                          stats=stats)
+    
+@app.route('/api/register_key/<string:type>', methods=['POST'])
+def register_key(type):
+    if type not in ['sender', 'receiver']:
+        return jsonify({'error': 'Invalid type specified'}), 400
+    
+    data = request.get_json() or {}
+    
+    client_ip = get_client_ip()
+    if type == 'sender':
+        existing_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
+        if existing_mapping:
+            if existing_mapping.has_keys != True:
+                existing_mapping.has_keys = True
+                db.session.commit()
+                
+            return jsonify({
+                'message': 'Sender key already registered',
+                'ip_address': client_ip,
+                'created_at': existing_mapping.created_at.isoformat()
+            }), 200
+        ip_mapping = IPUserKeyMapping(
+            ip_address=client_ip,
+            has_keys=True,
+            created_at=datetime.utcnow(),
+        )
+    else:
+        existing_mapping = IPHostKeyMapping.query.filter_by(
+            host_ip=client_ip,
+            host_name=data.get('host_name', 'default')
+        ).first()
+        if existing_mapping:
+            if existing_mapping.has_keys != True:
+                existing_mapping.has_keys = True
+                db.session.commit()
+                
+            return jsonify({
+                'message': 'Receiver key already registered',
+                'ip_address': client_ip,
+                'created_at': existing_mapping.created_at.isoformat()
+            }), 200
+        ip_mapping = IPHostKeyMapping(
+            host_ip=client_ip,
+            host_name=data.get('host_name', 'default'),
+            has_keys=True,
+            created_at=datetime.utcnow(),
+        )
+    db.session.add(ip_mapping)
+    db.session.commit()
+    return jsonify({
+        'message': f'{type.capitalize()} key registered successfully',
+        'ip_address': client_ip,
+        'created_at': ip_mapping.created_at.isoformat()
+    })
 
 @app.route('/receiver_hosts')
 def receiver_hosts():
@@ -151,6 +178,7 @@ def add_host():
     host_ip = get_client_ip()
     name = request.form.get('name')
     description = request.form.get('description')
+    has_keys = request.form.get('has_keys').lower() == 'true'
     
     existing_host = Host.query.filter_by(created_by=host_ip, name=name).first()
     if existing_host:
@@ -160,13 +188,10 @@ def add_host():
     ip_mapping = IPHostKeyMapping.query.filter_by(host_ip=host_ip, host_name=name).first()
     if not ip_mapping:
         try:
-            public_key_pem, private_key_pem = generate_rsa_keypair()
-            
             ip_mapping = IPHostKeyMapping(
                 host_ip=host_ip,
-                host_name=name,
-                public_key_pem=public_key_pem,
-                private_key_pem=private_key_pem
+                has_keys=has_keys,
+                host_name=name
             )
             
             db.session.add(ip_mapping)
@@ -180,8 +205,8 @@ def add_host():
         name=name,
         ip_address=host_ip,
         description=description,
-        public_key=ip_mapping.public_key_pem,
-        created_by=host_ip
+        created_by=host_ip,
+        has_keys=has_keys
     )
     
     try:
@@ -235,24 +260,17 @@ def delete_host(host_id):
 @app.route('/sender_select_host')
 def sender_select_host():
     """Display available hosts for selection"""
-    if not ensure_sender_keys():
-        flash('Error generating RSA keys. Please try again.', 'error')
-        return redirect(url_for('sender_dashboard'))
     
     client_ip = get_client_ip()
     ip_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
     
     if not ip_mapping:
         try:
-            public_key_pem, private_key_pem = generate_rsa_keypair()
             ip_mapping = IPUserKeyMapping(
-                ip_address=client_ip,
-                public_key_pem=public_key_pem,
-                private_key_pem=private_key_pem
+                ip_address=client_ip
             )
             db.session.add(ip_mapping)
             db.session.commit()
-            flash('RSA keys generated successfully', 'success')
         except Exception as e:
             flash(f'Error generating RSA keys: {str(e)}', 'error')
             return redirect(url_for('sender_dashboard'))
@@ -288,14 +306,14 @@ def select_upload_host(host_id):
     """Select a host for file upload"""
     host = Host.query.get_or_404(host_id)
     
-    if not host.public_key:
+    if not host.has_keys:
         flash('Selected host does not have a public key available', 'error')
         return redirect(url_for('sender_select_host'))
     
     session['selected_host_id'] = host_id
     session['selected_host_name'] = host.name
     session['selected_host_ip'] = host.ip_address
-    session['selected_host_public_key'] = host.public_key
+    session['selected_host_has_keys'] = host.has_keys
     session['mode'] = 'sender'
     
     app.logger.info(f"Host selected - ID: {host_id}, Name: {host.name}, IP: {host.ip_address}")
@@ -341,8 +359,8 @@ def receiver_files():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    """Handle secure file upload"""
-    app.logger.info("Starting file upload process")
+    """Handle secure file upload (client-side encryption)"""
+    app.logger.info("Starting file upload process (client-side encryption)")
 
     csrf_token = request.headers.get('X-CSRFToken')
     if not csrf_token:
@@ -354,15 +372,19 @@ def upload_file():
         return jsonify({'error': 'No file part'}), 400
 
     file = request.files['file']
+    # Các thông tin metadata do client gửi lên
+    iv_b64 = request.form.get('iv')
+    encrypted_session_key_b64 = request.form.get('encrypted_session_key')
+    metadata_json = request.form.get('metadata')
+    metadata_signature_b64 = request.form.get('metadata_signature')
+    file_hash = request.form.get('file_hash')
     file_drive_id = request.form.get('file_drive_id')
     file_drive_link = request.form.get('file_drive_link')
     file_source_type = request.form.get('file_source_type')
-    
+
     if file.filename == '':
         app.logger.error("Uploaded file has empty filename")
         return jsonify({'error': 'No selected file'}), 400
-
-    app.logger.info(f"Processing file: {file.filename}")
 
     selected_host_id = session.get('selected_host_id')
     if not selected_host_id:
@@ -401,72 +423,25 @@ def upload_file():
     encrypted_path = None
 
     try:
-        sender_keys = IPUserKeyMapping.query.filter_by(ip_address=sender_ip).first()
-        if not sender_keys:
-            app.logger.error(f"No keys found for sender IP {sender_ip}")
-            raise Exception("Sender keys not found")
-
-        temp_path, file_hash = store_temp_file(file)
-        app.logger.info(f"Temporary file stored at: {temp_path}")
+        # Lưu file đã mã hóa vào thư mục tạm
+        temp_path, _ = store_temp_file(file)
+        app.logger.info(f"Temporary encrypted file stored at: {temp_path}")
 
         session_token = secrets.token_urlsafe(48)
-        session_key = generate_session_key()
 
-        file_metadata = {
-            'filename': file.filename,
-            'timestamp': datetime.utcnow().isoformat(),
-            'sender_ip': sender_ip
-        }
+        # Di chuyển file sang vị trí lưu trữ chính thức
+        encrypted_path = move_temp_to_permanent(temp_path, session_token, file.filename)
+        app.logger.info(f"Encrypted file moved to: {encrypted_path}")
 
-        try:
-            metadata_bytes = json.dumps(file_metadata).encode('utf-8')
-            metadata_signature = sign_data(metadata_bytes, sender_keys.private_key_pem)
-        except Exception as e:
-            app.logger.error(f"Signing metadata failed: {str(e)}")
-            raise Exception("Metadata signing failed")
-
-        try:
-            with open(temp_path, 'rb') as f:
-                file_data = f.read()
-        except Exception as e:
-            app.logger.error(f"Reading temp file failed: {str(e)}")
-            raise Exception("Unable to read uploaded file")
-
-        try:
-            encrypted_session_key = encrypt_with_public_key(session_key, host.public_key)
-        except Exception as e:
-            app.logger.error(f"Encrypting session key failed: {str(e)}")
-            raise Exception("File encryption failed: Unable to encrypt session key")
-
-        try:
-            encrypted_data, iv = encrypt_file_aes(file_data, session_key)
-        except Exception as e:
-            app.logger.error(f"AES encryption failed: {str(e)}")
-            raise Exception("AES encryption failed")
-
-        secured_hash = hash_file_with_iv(iv, encrypted_data)
-
-        try:
-            encrypted_path = move_temp_to_permanent(temp_path, session_token, file.filename)
-        except Exception as e:
-            app.logger.error(f"Moving encrypted file failed: {str(e)}")
-            raise Exception("Error saving encrypted file")
-
-        try:
-            with open(encrypted_path, 'wb') as f:
-                f.write(iv + encrypted_data)
-        except Exception as e:
-            app.logger.error(f"Writing encrypted data failed: {str(e)}")
-            raise Exception("Saving encrypted file failed")
-
+        # Lưu thông tin upload session
         upload_session = UploadSession(
             sender_ip=sender_ip,
             receiver_ip=host.ip_address,
             receiver_name=host.name,
             session_token=session_token,
             filename=file.filename,
-            file_hash=secured_hash,
-            file_size=len(file_data),
+            file_hash=file_hash,
+            file_size=os.path.getsize(encrypted_path),
             filepath=encrypted_path,
             drive_file_id=file_drive_id,
             drive_link=file_drive_link,
@@ -474,18 +449,14 @@ def upload_file():
             status=FILE_STATUS['PENDING']
         )
 
-        try:
-            metadata = {
-                'iv': base64.b64encode(iv).decode('utf-8'),
-                'encrypted_session_key': base64.b64encode(encrypted_session_key).decode('utf-8'),
-                'metadata': file_metadata,
-                'metadata_signature': base64.b64encode(metadata_signature).decode('utf-8')
-            }
-            app.logger.info(f"Setting metadata for upload session: {metadata}")
-            upload_session.set_metadata(metadata)
-        except Exception as e:
-            app.logger.error(f"Storing metadata failed: {str(e)}")
-            raise Exception("Failed to set metadata")
+        # Lưu metadata (IV, encrypted session key, metadata, signature)
+        metadata = {
+            'iv': iv_b64,
+            'encrypted_session_key': encrypted_session_key_b64,
+            'metadata': json.loads(metadata_json) if metadata_json else {},
+            'metadata_signature': metadata_signature_b64
+        }
+        upload_session.set_metadata(metadata)
 
         db.session.add(upload_session)
         db.session.commit()
@@ -500,12 +471,8 @@ def upload_file():
         return jsonify({
             'message': 'File uploaded successfully',
             'session_token': session_token,
-            'file_hash': secured_hash,
-            'metadata': {
-                'iv': base64.b64encode(iv).decode('utf-8'),
-                'public_key': host.public_key,
-                'hash_type': 'SHA-512'
-            }
+            'file_hash': file_hash,
+            'metadata': metadata
         })
 
     except Exception as e:
@@ -639,9 +606,7 @@ def sender_secure_upload():
     
     client_ip = get_client_ip()
     if not IPUserKeyMapping.query.filter_by(ip_address=client_ip).first():
-        if not ensure_sender_keys():
-            flash('Failed to generate sender keys.', 'error')
-            return redirect(url_for('sender_dashboard'))
+        return redirect(url_for('sender_dashboard'))
     
     return render_template('secure_upload.html', selected_host=selected_host)
 
@@ -821,28 +786,12 @@ def sender_key_management():
     ip_mapping = IPUserKeyMapping.query.filter_by(ip_address=client_ip).first()
     
     if not ip_mapping:
-        try:
-            public_key_pem, private_key_pem = generate_rsa_keypair()
-            ip_mapping = IPUserKeyMapping(
-                ip_address=client_ip,
-                public_key_pem=public_key_pem,
-                private_key_pem=private_key_pem
-            )
-            db.session.add(ip_mapping)
-            db.session.commit()
-            flash('RSA keys generated successfully', 'success')
-        except Exception as e:
-            flash(f'Error generating RSA keys: {str(e)}', 'error')
-            return redirect(url_for('sender_dashboard'))
-    
-    has_keys = ip_mapping is not None
-    public_key = ip_mapping.public_key_pem
-    private_key = ip_mapping.private_key_pem
+        has_keys = False
+    else:
+        has_keys = True
     
     return render_template('key_management.html',
-                         has_keys=has_keys,
-                         public_key=public_key,
-                         private_key=private_key)
+                         has_keys=has_keys)
 
 @app.errorhandler(404)
 def not_found(error):

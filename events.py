@@ -12,7 +12,7 @@ def notify_new_host(host_data):
         'description': host_data.description,
         'created_by': host_data.created_by,
         'created_at': host_data.created_at.isoformat(),
-        'public_key': bool(host_data.public_key)
+        'has_keys': host_data.has_keys,
     }
     socketio.emit('new_host', host_dict, namespace='/', to=None)
     logging.info(f"Emitted new_host event: {host_dict}")

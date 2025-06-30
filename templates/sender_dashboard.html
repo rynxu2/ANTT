@@ -262,11 +262,80 @@ function refreshTransfers() {
     location.reload();
 }
 
+const PRIVATE_KEY_STORAGE_KEY = 'rsa_sender_private_key_pem';
+const PUBLIC_KEY_STORAGE_KEY = 'rsa_sender_public_key_pem';
+
+async function generateRSAKeyPair() {
+    const keyPair = await window.crypto.subtle.generateKey(
+        {
+            name: 'RSA-OAEP',
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([1, 0, 1]),
+            hash: 'SHA-256',
+        },
+        true,
+        ['encrypt', 'decrypt']
+    );
+    const publicKey = await window.crypto.subtle.exportKey('spki', keyPair.publicKey);
+    const privateKey = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+    return {
+        publicKeyPem: pemEncode(publicKey, 'PUBLIC KEY'),
+        privateKeyPem: pemEncode(privateKey, 'PRIVATE KEY'),
+    };
+}
+
+function pemEncode(buffer, label) {
+    const base64 = window.btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    const lines = base64.match(/.{1,64}/g).join('\n');
+    return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----`;
+}
+
+function savePrivateKeyToLocalStorage(pem) {
+    localStorage.setItem(PRIVATE_KEY_STORAGE_KEY, pem);
+}
+function getPrivateKeyFromLocalStorage() {
+    return localStorage.getItem(PRIVATE_KEY_STORAGE_KEY);
+}
+function savePublicKeyToLocalStorage(pem) {
+    localStorage.setItem(PUBLIC_KEY_STORAGE_KEY, pem);
+}
+function getPublicKeyFromLocalStorage() {
+    return localStorage.getItem(PUBLIC_KEY_STORAGE_KEY);
+}
+function getKeysFromLocalStorage() {
+    const private_key = localStorage.getItem(PRIVATE_KEY_STORAGE_KEY);
+    const public_key = localStorage.getItem(PUBLIC_KEY_STORAGE_KEY);
+    return private_key && public_key ? { privateKey: private_key, publicKey: public_key } : null;
+}
+
+async function ensureKeys() {
+    let keys = getKeysFromLocalStorage();
+    console.log('Keys from localStorage:', keys);
+    console.log(!keys)
+    if (!keys) {
+        const { publicKeyPem, privateKeyPem } = await generateRSAKeyPair();
+        savePrivateKeyToLocalStorage(privateKeyPem);
+        savePublicKeyToLocalStorage(publicKeyPem);
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        await fetch('/api/register_key/sender', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({})
+        });
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function(tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
+
+    ensureKeys();
 });
 </script>
 {% endblock %}

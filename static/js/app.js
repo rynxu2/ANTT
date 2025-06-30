@@ -14,46 +14,22 @@ class SecureUploadClient {
         document.getElementById('uploadForm')?.addEventListener('submit', (e) => this.handleFileUpload(e));
     }
 
-    async generateKeys() {
-        const btn = document.getElementById('generateKeysBtn');
-        const originalText = btn.innerHTML;
-
-        try {
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generating...';
-            btn.disabled = true;
-
-            const res = await fetch('/generate_keys', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-            const result = await res.json();
-
-            if (result.success) setTimeout(() => location.reload(), 1000);
-
-        } catch (error) {
-            console.error('Key generation failed:', error);
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }
-    }
-
     async handleFileUpload(e) {
         e.preventDefault();
         const uploadBtn = document.querySelector('#uploadBtn');
         const fileInput = document.getElementById('fileInput');
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const fileSource = document.querySelector('input[name="fileSource"]:checked')?.value;
-
         const loadingOverlay = document.getElementById('loading-overlay');
         loadingOverlay?.classList.remove('d-none');
-
         const originalText = uploadBtn.innerHTML;
         uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
         uploadBtn.disabled = true;
-
         try {
-            if (fileSource === 'local' && !this.hasKeys) {
+            if (fileSource === 'local') {
                 const file = fileInput?.files[0];
                 if (!file) return;
-
+                // Validate file type
                 const allowedTypes = [
                     'application/pdf',
                     'application/msword',
@@ -70,26 +46,80 @@ class SecureUploadClient {
                     loadingOverlay?.classList.add('d-none');
                     return;
                 }
-
+                // 1. Read file as ArrayBuffer
+                const fileBuffer = await this.readFileAsArrayBuffer(file);
+                // 2. Generate AES-CBC key and IV
+                const aesKey = await window.crypto.subtle.generateKey(
+                    { name: 'AES-CBC', length: 256 }, true, ['encrypt', 'decrypt']
+                );
+                const iv = window.crypto.getRandomValues(new Uint8Array(16));
+                // 3. Encrypt file (AES-CBC)
+                const encryptedContent = await window.crypto.subtle.encrypt(
+                    { name: 'AES-CBC', iv }, aesKey, fileBuffer
+                );
+                // 4. Export and encrypt AES key with recipient's public key (RSA-OAEP + SHA-512)
+                const exportedAesKey = await window.crypto.subtle.exportKey('raw', aesKey);
+                const recipientPublicKeyPem = this.serverPublicKey;
+                const recipientPublicKey = await this.importRsaPublicKey(recipientPublicKeyPem, 'SHA-512');
+                const encryptedSessionKey = await window.crypto.subtle.encrypt(
+                    { name: 'RSA-OAEP' }, recipientPublicKey, exportedAesKey
+                );
+                // 5. Hash file (SHA-512(IV || ciphertext))
+                const ivAndCipher = new Uint8Array(iv.length + encryptedContent.byteLength);
+                ivAndCipher.set(iv, 0);
+                ivAndCipher.set(new Uint8Array(encryptedContent), iv.length);
+                const fileHash = await this.calculateSHA512(ivAndCipher.buffer);
+                // 6. Metadata: filename, timestamp, sender_ip
+                const senderIp = this.clientIP;
+                const metadata = {
+                    filename: file.name,
+                    filetype: file.type,
+                    filesize: file.size,
+                    timestamp: new Date().toISOString(),
+                    sender_ip: senderIp
+                };
+                // 7. Ký số metadata bằng private key RSA/SHA-512
+                const privateKeyPem = localStorage.getItem('rsa_private_key_pem');
+                if (!privateKeyPem) {
+                    alert('Không tìm thấy private key trên trình duyệt.');
+                    return;
+                }
+                const privateKey = await this.importRsaPrivateKey(privateKeyPem, 'SHA-512');
+                const metadataString = JSON.stringify(metadata);
+                const encoder = new TextEncoder();
+                const metadataBytes = encoder.encode(metadataString);
+                const signature = await window.crypto.subtle.sign(
+                    { name: 'RSASSA-PKCS1-v1_5' },
+                    privateKey,
+                    await window.crypto.subtle.digest('SHA-512', metadataBytes)
+                );
+                // 8. Prepare FormData (gói tin đúng yêu cầu)
                 const formData = new FormData();
-                formData.append('file', file);
-
+                formData.append('iv', this.arrayBufferToBase64(iv));
+                formData.append('cipher', this.arrayBufferToBase64(encryptedContent));
+                formData.append('hash', fileHash);
+                formData.append('sig', this.arrayBufferToBase64(signature));
+                formData.append('encrypted_session_key', this.arrayBufferToBase64(encryptedSessionKey));
+                formData.append('metadata', metadataString);
+                formData.append('file', new Blob([encryptedContent]), file.name + '.enc');
+                // 9. Send to server
                 const res = await fetch('/upload', {
                     method: 'POST',
                     headers: { 'X-CSRFToken': csrfToken },
                     body: formData
                 });
-
                 const result = await res.json();
                 if (res.ok) {
                     this.showUploadSuccess(result);
                     fileInput.value = '';
                 } else {
                     const msg = result.error || 'Upload failed';
+                    alert(msg);
                 }
             }
         } catch (err) {
             console.error('Upload error:', err);
+            alert('Upload error: ' + err.message);
         } finally {
             loadingOverlay?.classList.add('d-none');
             uploadBtn.innerHTML = originalText;
@@ -97,46 +127,18 @@ class SecureUploadClient {
         }
     }
 
-    showUploadSuccess(result) {
-        const setText = (id, value) => document.getElementById(id).textContent = value;
-        setText('sessionToken', result.session_token);
-        setText('fileHash', result.file_hash);
-        setText('iv', result.metadata.iv);
-        setText('publicKey', result.metadata.public_key);
-        setText('hashType', result.metadata.hash_type);
-
-        document.querySelector('.step.active')?.classList.replace('active', 'completed');
-        document.querySelector('.step:last-child')?.classList.add('active');
-        document.getElementById('uploadForm').style.display = 'none';
-        document.getElementById('successInfo').classList.remove('d-none');
-        document.querySelector('#headerbar .col:last-child .step')?.classList.add('completed');
+    async importRsaPublicKey(pem) {
+        // Remove header/footer and newlines
+        const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+        const der = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        return window.crypto.subtle.importKey(
+            'spki', der.buffer, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt']
+        );
     }
 
-    generateRandomKey(length) {
-        const array = new Uint8Array(length);
-        crypto.getRandomValues(array);
-        return array;
-    }
-
-    readFileAsArrayBuffer(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(new Uint8Array(reader.result));
-            reader.onerror = reject;
-            reader.readAsArrayBuffer(file);
-        });
-    }
-
-    simulateAESEncryption(data, key, iv) { return Promise.resolve(data); }
-    simulateSignature(data) { return Promise.resolve(this.generateRandomKey(128)); }
-    simulateRSAEncryption(data) { return Promise.resolve(this.generateRandomKey(128)); }
-
-    async calculateSHA512(data) {
-        try {
-            return CryptoJS.SHA512(CryptoJS.lib.WordArray.create(data)).toString(CryptoJS.enc.Hex);
-        } catch (e) {
-            throw e;
-        }
+    async calculateSHA512(buffer) {
+        const hashBuffer = await window.crypto.subtle.digest('SHA-512', buffer);
+        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
     arrayBufferToBase64(buffer) {
@@ -179,34 +181,6 @@ class SecureUploadClient {
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => console.log('Copied to clipboard')).catch(console.error);
-}
-
-async function addRecipient(ip, name) {
-    try {
-        const res = await fetch('/add_recipient', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ip, name })
-        });
-        const result = await res.json();
-        if (result.success) location.reload();
-        else alert('Error: ' + result.message);
-    } catch (e) {
-        console.error('Add error:', e);
-        alert('Failed to add recipient');
-    }
-}
-
-async function deleteRecipient(id) {
-    try {
-        const res = await fetch(`/delete_recipient/${id}`, { method: 'DELETE' });
-        const result = await res.json();
-        if (result.success) location.reload();
-        else alert('Error: ' + result.message);
-    } catch (e) {
-        console.error('Delete error:', e);
-        alert('Failed to delete recipient');
-    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {

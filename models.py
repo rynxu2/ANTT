@@ -7,8 +7,7 @@ class IPUserKeyMapping(db.Model):
     """Store RSA key pairs for each IP address"""
     id = db.Column(db.Integer, primary_key=True)
     ip_address = db.Column(db.String(45), unique=True, nullable=False)
-    public_key_pem = db.Column(db.Text, nullable=False)
-    private_key_pem = db.Column(db.Text, nullable=False)
+    has_keys = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_used = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -20,8 +19,7 @@ class IPHostKeyMapping(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     host_ip = db.Column(db.String(45), nullable=False)
     host_name = db.Column(db.String(100), nullable=False)
-    public_key_pem = db.Column(db.Text, nullable=False)
-    private_key_pem = db.Column(db.Text, nullable=False)
+    has_keys = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_used = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -97,7 +95,7 @@ class Host(db.Model):
     name = db.Column(db.String(100), nullable=False)
     ip_address = db.Column(db.String(45), nullable=False)
     description = db.Column(db.Text)
-    public_key = db.Column(db.Text)
+    has_keys = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.String(45))
     
