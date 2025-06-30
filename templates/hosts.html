@@ -86,6 +86,7 @@
             </div>            <form action="{{ url_for('add_host') }}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="has_keys">
+                <input type="hidden" name="public_key">
                 <div class="modal-body">                
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
@@ -191,15 +192,18 @@
                     'X-CSRFToken': csrfToken
                 },
                 body: JSON.stringify({
-                    host_name: host_name
+                    host_name: host_name,
+                    public_key: publicKeyPem
                 })
             })
             .then(response => {
                 var addHostForm = document.querySelector('#addHostModal form');
                 if (response.ok) {
                     addHostForm.querySelector('input[name="has_keys"]').value = 'true';
+                    addHostForm.querySelector('input[name="public_key"]').value = publicKeyPem;
                 } else {
                     addHostForm.querySelector('input[name="has_keys"]').value = 'false';
+                    addHostForm.querySelector('input[name="public_key"]').value = '';
                 }
             });
         }

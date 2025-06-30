@@ -3,7 +3,6 @@ class SecureUploadClient {
         const data = window.serverData || {};
         this.clientIP = data.clientIP || '';
         this.hasKeys = data.hasKeys || false;
-        this.serverPublicKey = data.publicKey || null;
         this.selectedHost = data.selectedHost || null;
 
         this.initEvents();
@@ -20,7 +19,9 @@ class SecureUploadClient {
         const fileInput = document.getElementById('fileInput');
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
         const fileSource = document.querySelector('input[name="fileSource"]:checked')?.value;
+        const host_name = document.querySelector('input[name="host_name"]')?.value;
         const loadingOverlay = document.getElementById('loading-overlay');
+
         loadingOverlay?.classList.remove('d-none');
         const originalText = uploadBtn.innerHTML;
         uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
@@ -59,7 +60,11 @@ class SecureUploadClient {
                 );
                 // 4. Export and encrypt AES key with recipient's public key (RSA-OAEP + SHA-512)
                 const exportedAesKey = await window.crypto.subtle.exportKey('raw', aesKey);
-                const recipientPublicKeyPem = this.serverPublicKey;
+                const recipientPublicKeyPem = this.getHostPublicKey();
+                if (!recipientPublicKeyPem) {
+                    console.error('Recipient public key is missing or invalid.');
+                    throw new Error('Recipient public key is missing or invalid.');
+                }
                 const recipientPublicKey = await this.importRsaPublicKey(recipientPublicKeyPem, 'SHA-512');
                 const encryptedSessionKey = await window.crypto.subtle.encrypt(
                     { name: 'RSA-OAEP' }, recipientPublicKey, exportedAesKey
@@ -70,16 +75,16 @@ class SecureUploadClient {
                 ivAndCipher.set(new Uint8Array(encryptedContent), iv.length);
                 const fileHash = await this.calculateSHA512(ivAndCipher.buffer);
                 // 6. Metadata: filename, timestamp, sender_ip
-                const senderIp = this.clientIP;
+                const senderIp = this.get_ip();
                 const metadata = {
                     filename: file.name,
                     filetype: file.type,
                     filesize: file.size,
                     timestamp: new Date().toISOString(),
-                    sender_ip: senderIp
+                    sender_ip: senderIp,
                 };
                 // 7. Ký số metadata bằng private key RSA/SHA-512
-                const privateKeyPem = localStorage.getItem('rsa_private_key_pem');
+                const privateKeyPem = localStorage.getItem('rsa_sender_private_key_pem');
                 if (!privateKeyPem) {
                     alert('Không tìm thấy private key trên trình duyệt.');
                     return;
@@ -96,7 +101,6 @@ class SecureUploadClient {
                 // 8. Prepare FormData (gói tin đúng yêu cầu)
                 const formData = new FormData();
                 formData.append('iv', this.arrayBufferToBase64(iv));
-                formData.append('cipher', this.arrayBufferToBase64(encryptedContent));
                 formData.append('hash', fileHash);
                 formData.append('sig', this.arrayBufferToBase64(signature));
                 formData.append('encrypted_session_key', this.arrayBufferToBase64(encryptedSessionKey));
@@ -127,12 +131,60 @@ class SecureUploadClient {
         }
     }
 
-    async importRsaPublicKey(pem) {
+    async get_ip() {
+        try {
+            const responsive = await fetch('/get_ip');
+            if (!responsive.ok) {
+                throw new Error('Failed to fetch IP address');
+            } 
+            const data = await responsive.json();
+            return data.ip_address || '';
+        } catch (error) {
+            console.error('Error fetching IP address:', error);
+            return '';
+        }
+    }
+
+    getHostPublicKey() {
+        const publicKeyInput = document.querySelector(`input[name="host_public_key"]`);
+        const publicKeyPem = publicKeyInput ? publicKeyInput.value : null;
+        return publicKeyPem;
+    }
+
+    showUploadSuccess(result) {
+        const setText = (id, value) => document.getElementById(id).textContent = value;
+        setText('sessionToken', result.session_token);
+        setText('fileHash', result.file_hash);
+        setText('iv', result.metadata.iv);
+
+        document.querySelector('.step.active')?.classList.replace('active', 'completed');
+        document.querySelector('.step:last-child')?.classList.add('active');
+        document.getElementById('uploadForm').style.display = 'none';
+        document.getElementById('successInfo').classList.remove('d-none');
+        document.querySelector('#headerbar .col:last-child .step')?.classList.add('completed');
+    }
+
+    async importRsaPublicKey(pem, hashAlg = 'SHA-512') {
+        if (!pem) {
+            throw new Error('Public key PEM is null or undefined.');
+        }
         // Remove header/footer and newlines
         const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
         const der = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
         return window.crypto.subtle.importKey(
-            'spki', der.buffer, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt']
+            'spki', der.buffer, { name: 'RSA-OAEP', hash: { name: hashAlg } }, true, ['encrypt']
+        );
+    }
+
+    async importRsaPrivateKey(pem, hashAlg = 'SHA-512') {
+        if (!pem) {
+            throw new Error('Private key PEM is null or undefined.');
+        }
+        // Remove header/footer and newlines
+        const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+        const der = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        return window.crypto.subtle.importKey(
+            'pkcs8', der.buffer, { name: 'RSASSA-PKCS1-v1_5', hash: { name: hashAlg } }, true, ['sign']
         );
     }
 
@@ -176,6 +228,15 @@ class SecureUploadClient {
         `;
         container.style.display = 'block';
         container.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+        });
     }
 }
 

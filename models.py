@@ -8,6 +8,7 @@ class IPUserKeyMapping(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ip_address = db.Column(db.String(45), unique=True, nullable=False)
     has_keys = db.Column(db.Boolean, default=False, nullable=False)
+    public_key = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_used = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -20,6 +21,7 @@ class IPHostKeyMapping(db.Model):
     host_ip = db.Column(db.String(45), nullable=False)
     host_name = db.Column(db.String(100), nullable=False)
     has_keys = db.Column(db.Boolean, default=False, nullable=False)
+    public_key = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_used = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -96,6 +98,7 @@ class Host(db.Model):
     ip_address = db.Column(db.String(45), nullable=False)
     description = db.Column(db.Text)
     has_keys = db.Column(db.Boolean, default=False, nullable=False)
+    public_key = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     created_by = db.Column(db.String(45))
     

@@ -86,6 +86,9 @@
             <div class="card-body">
                 <form id="uploadForm" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="host_id" value="{{ selected_host.id }}">
+                    <input type="hidden" name="host_name" value="{{ selected_host.name }}">
+                    <input type="hidden" name="host_public_key" value="{{ selected_host.public_key }}">
                     
                     <!-- File Source Selection -->
                     <div class="mb-4">
@@ -187,11 +190,6 @@
                                     <code id="fileHash" class="d-block mb-2"></code></p>
                                 <p><strong>Initialization Vector (IV):</strong><br>
                                     <code id="iv" class="d-block mb-2"></code></p>
-                                <details class="mb-3">
-                                    <summary><strong>Public Key (dùng để mã hóa)</strong></summary>
-                                    <pre><code id="publicKey" class="d-block mt-2 small" style="white-space: pre-wrap;"></code></pre>
-                                </details>
-                                <p><small class="text-muted">Thuật toán băm: <span id="hashType"></span></small></p>
                             </div>
                             <div class="col-md-6">
                                 <h6>Bước tiếp theo</h6>
@@ -216,8 +214,8 @@
 <script src="https://accounts.google.com/gsi/client"></script>
 
 <script>
-    const API_KEY = 'AIzaSyBKXjV_R5JtvN10QQrcA4fJDBaqqQhsYGk';
-    const CLIENT_ID = '287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com';
+    const API_KEY = 'AIzaSyDvKGQ-dt0AWhHLHgYZ0CEGdvMZ3BkGmCo';
+    const CLIENT_ID = '326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json';
     const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 
     let accessToken = null;
@@ -355,6 +353,50 @@
             if (e.target.checked && !pickerInited) initializeGoogleDrive();
         });
 
+        const getHostPublicKey = () => {
+            const publicKeyInput = document.querySelector(`input[name="host_public_key"]`);
+            const publicKeyPem = publicKeyInput ? publicKeyInput.value : null;
+            return publicKeyPem;
+        };
+
+        const importRsaPublicKey = (pem, hashAlg = 'SHA-512') => {
+            if (!pem) {
+                throw new Error('Public key PEM is null or undefined.');
+            }
+            const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+            const der = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+            return window.crypto.subtle.importKey(
+                'spki', der.buffer, { name: 'RSA-OAEP', hash: { name: hashAlg } }, true, ['encrypt']
+            );
+        }
+
+        const importRsaPrivateKey = (pem, hashAlg = 'SHA-512') => {
+            if (!pem) {
+                throw new Error('Private key PEM is null or undefined.');
+            }
+            const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+            const der = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+            return window.crypto.subtle.importKey(
+                'pkcs8', der.buffer, { name: 'RSASSA-PKCS1-v1_5', hash: { name: hashAlg } }, true, ['sign']
+            );
+        }
+
+        const calculateSHA512 = async (buffer) => {
+            const hashBuffer = await window.crypto.subtle.digest('SHA-512', buffer);
+            return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        const client_ip = async () => {
+            try {
+                const response = await fetch('/get_my_ip');
+                const data = await response.json();
+                return data.ip_address;
+            } catch (error) {
+                console.error('Failed to get client IP:', error);
+                return 'unknown';
+            }
+        };
+
         form.addEventListener('submit', async e => {
             e.preventDefault();
             const fileSource = document.querySelector('input[name="fileSource"]:checked').value;
@@ -376,12 +418,62 @@
                     if (!response.ok) throw new Error('Failed to get file from Drive');
 
                     const blob = await response.blob();
-                    const file = new File([blob], selectedFile.name, { type: blob.type });
-                    const formData = new FormData();
-                    formData.append('file', file);
-
+                    const fileBuffer = await blob.arrayBuffer();
                     el('uploadProgress').style.width = '50%';
                     el('statusText').textContent = 'Get file complete!';
+                    // 2. Generate AES-CBC key and IV
+                    const aesKey = await window.crypto.subtle.generateKey(
+                        { name: 'AES-CBC', length: 256 }, true, ['encrypt', 'decrypt']
+                    );
+                    const iv = window.crypto.getRandomValues(new Uint8Array(16));
+                    // 3. Encrypt file (AES-CBC)
+                    const encryptedContent = await window.crypto.subtle.encrypt(
+                        { name: 'AES-CBC', iv }, aesKey, fileBuffer
+                    );
+                    // 4. Export and encrypt AES key with recipient's public key (RSA-OAEP + SHA-512)
+                    const exportedAesKey = await window.crypto.subtle.exportKey('raw', aesKey);
+                    const recipientPublicKeyPem = getHostPublicKey();
+                    const recipientPublicKey = await importRsaPublicKey(recipientPublicKeyPem, 'SHA-512');
+                    const encryptedSessionKey = await window.crypto.subtle.encrypt(
+                        { name: 'RSA-OAEP' }, recipientPublicKey, exportedAesKey
+                    );
+                    // 5. Hash file (SHA-512(IV || ciphertext))
+                    const ivAndCipher = new Uint8Array(iv.length + encryptedContent.byteLength);
+                    ivAndCipher.set(iv, 0);
+                    ivAndCipher.set(new Uint8Array(encryptedContent), iv.length);
+                    const fileHash = await calculateSHA512(ivAndCipher.buffer);
+                    // 6. Metadata: filename, timestamp, sender_ip
+                    const senderIp = client_ip();
+                    const metadata = {
+                        filename: file.name,
+                        filetype: file.type,
+                        filesize: file.size,
+                        timestamp: new Date().toISOString(),
+                        sender_ip: senderIp,
+                    };
+                    // 7. Ký số metadata bằng private key RSA/SHA-512
+                    const privateKeyPem = localStorage.getItem('rsa_sender_private_key_pem');
+                    if (!privateKeyPem) {
+                        alert('Không tìm thấy private key trên trình duyệt.');
+                        return;
+                    }
+                    const privateKey = await importRsaPrivateKey(privateKeyPem, 'SHA-512');
+                    const metadataString = JSON.stringify(metadata);
+                    const encoder = new TextEncoder();
+                    const metadataBytes = encoder.encode(metadataString);
+                    const signature = await window.crypto.subtle.sign(
+                        { name: 'RSASSA-PKCS1-v1_5' },
+                        privateKey,
+                        await window.crypto.subtle.digest('SHA-512', metadataBytes)
+                    );
+                    // 8. Prepare FormData (gói tin đúng yêu cầu)
+                    const formData = new FormData();
+                    formData.append('iv', this.arrayBufferToBase64(iv));
+                    formData.append('hash', fileHash);
+                    formData.append('sig', this.arrayBufferToBase64(signature));
+                    formData.append('encrypted_session_key', this.arrayBufferToBase64(encryptedSessionKey));
+                    formData.append('metadata', metadataString);
+                    formData.append('file', new Blob([encryptedContent]), file.name + '.enc');
 
                     const upload = await fetch('/upload', {
                         method: 'POST',

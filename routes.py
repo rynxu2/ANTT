@@ -67,6 +67,14 @@ def index():
     """Landing page to choose between Receiver and Sender mode"""
     return render_template('index.html')
 
+@app.route('/get_ip')
+def get_ip():
+    """Get the client's IP address"""
+    client_ip = get_client_ip()
+    if not client_ip:
+        return jsonify({'error': 'Invalid IP address'}), 400
+    return jsonify({'ip_address': client_ip})
+
 @app.route('/receiver')
 def receiver_dashboard():
     """Dashboard for receiver mode"""
@@ -117,6 +125,7 @@ def register_key(type):
         return jsonify({'error': 'Invalid type specified'}), 400
     
     data = request.get_json() or {}
+    print(f"Received data for {type} key registration: {data}")
     
     client_ip = get_client_ip()
     if type == 'sender':
@@ -124,6 +133,7 @@ def register_key(type):
         if existing_mapping:
             if existing_mapping.has_keys != True:
                 existing_mapping.has_keys = True
+                existing_mapping.public_key = data.get('public_key')
                 db.session.commit()
                 
             return jsonify({
@@ -134,6 +144,7 @@ def register_key(type):
         ip_mapping = IPUserKeyMapping(
             ip_address=client_ip,
             has_keys=True,
+            public_key=data.get('public_key'),
             created_at=datetime.utcnow(),
         )
     else:
@@ -144,6 +155,7 @@ def register_key(type):
         if existing_mapping:
             if existing_mapping.has_keys != True:
                 existing_mapping.has_keys = True
+                existing_mapping.public_key = data.get('public_key')
                 db.session.commit()
                 
             return jsonify({
@@ -155,6 +167,7 @@ def register_key(type):
             host_ip=client_ip,
             host_name=data.get('host_name', 'default'),
             has_keys=True,
+            public_key=data.get('public_key'),
             created_at=datetime.utcnow(),
         )
     db.session.add(ip_mapping)
@@ -179,6 +192,11 @@ def add_host():
     name = request.form.get('name')
     description = request.form.get('description')
     has_keys = request.form.get('has_keys').lower() == 'true'
+    public_key = request.form.get('public_key')
+    
+    if not name:
+        flash('Host name is required', 'error')
+        return redirect(url_for('receiver_hosts'))
     
     existing_host = Host.query.filter_by(created_by=host_ip, name=name).first()
     if existing_host:
@@ -190,8 +208,9 @@ def add_host():
         try:
             ip_mapping = IPHostKeyMapping(
                 host_ip=host_ip,
+                host_name=name,
                 has_keys=has_keys,
-                host_name=name
+                public_key=public_key if has_keys else None,    
             )
             
             db.session.add(ip_mapping)
@@ -206,7 +225,8 @@ def add_host():
         ip_address=host_ip,
         description=description,
         created_by=host_ip,
-        has_keys=has_keys
+        has_keys=has_keys,
+        public_key=public_key if has_keys else None
     )
     
     try:
@@ -372,12 +392,11 @@ def upload_file():
         return jsonify({'error': 'No file part'}), 400
 
     file = request.files['file']
-    # Các thông tin metadata do client gửi lên
     iv_b64 = request.form.get('iv')
+    file_hash = request.form.get('hash')
     encrypted_session_key_b64 = request.form.get('encrypted_session_key')
     metadata_json = request.form.get('metadata')
-    metadata_signature_b64 = request.form.get('metadata_signature')
-    file_hash = request.form.get('file_hash')
+    metadata_signature_b64 = request.form.get('sig')
     file_drive_id = request.form.get('file_drive_id')
     file_drive_link = request.form.get('file_drive_link')
     file_source_type = request.form.get('file_source_type')
@@ -423,17 +442,14 @@ def upload_file():
     encrypted_path = None
 
     try:
-        # Lưu file đã mã hóa vào thư mục tạm
         temp_path, _ = store_temp_file(file)
         app.logger.info(f"Temporary encrypted file stored at: {temp_path}")
 
         session_token = secrets.token_urlsafe(48)
 
-        # Di chuyển file sang vị trí lưu trữ chính thức
         encrypted_path = move_temp_to_permanent(temp_path, session_token, file.filename)
         app.logger.info(f"Encrypted file moved to: {encrypted_path}")
 
-        # Lưu thông tin upload session
         upload_session = UploadSession(
             sender_ip=sender_ip,
             receiver_ip=host.ip_address,
@@ -449,7 +465,6 @@ def upload_file():
             status=FILE_STATUS['PENDING']
         )
 
-        # Lưu metadata (IV, encrypted session key, metadata, signature)
         metadata = {
             'iv': iv_b64,
             'encrypted_session_key': encrypted_session_key_b64,
@@ -823,7 +838,7 @@ def get_file_metadata(session_token):
             'signature': metadata['metadata_signature'],
             'sender_key': IPUserKeyMapping.query.filter_by(
                 ip_address=upload_session.sender_ip
-            ).first().public_key_pem,
+            ).first().public_key,
             'status': upload_session.status,
             'fail_step':  upload_session.fail_step if hasattr(upload_session, 'fail_step') else None,
             'error_message': upload_session.error_message if hasattr(upload_session, 'error_message') else None
@@ -846,7 +861,7 @@ def oauth2callback():
     if request.args.get('code'):
         try:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'client_secret_287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com.json',
+                'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
                 SCOPES
             )
             
@@ -867,7 +882,7 @@ def oauth2callback():
     
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            'client_secret_287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com.json',
+            'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
             SCOPES,
             redirect_uri=request.base_url
         )
