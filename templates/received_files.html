@@ -683,14 +683,11 @@ class VerificationModal {
 
     async runFullVerification() {
         if (!this.currentSessionToken) return;
-
         try {
             this.stepManager.resetAllSteps();
             this.showContent('verification-process');
-            
             const proceedBtn = document.getElementById('proceedVerifyBtn');
             proceedBtn.disabled = true;
-            
             document.querySelector('.status-loader')?.classList.remove('d-none');
             this.hideElements(['verification-success']);
             document.querySelector('.verification-head')?.classList.remove('d-none');
@@ -699,12 +696,21 @@ class VerificationModal {
             const metadata = await this.loadFileMetadata(this.currentSessionToken);
             const encryptedFile = await this.fetchEncryptedFile(this.currentSessionToken);
 
+            // Log các trường base64 để debug
+            console.log('metadata.signature:', metadata.signature);
+            console.log('metadata.iv:', metadata.iv);
+            console.log('metadata.encrypted_session_key:', metadata.encrypted_session_key);
+            console.log('metadata.sender_key:', metadata.sender_key);
+
             // 3. Xác minh chữ ký số
             this.stepManager.updateStepState(document.getElementById('step-signature'), 'active');
             const senderPublicKey = await this.importRsaPublicKey(metadata.sender_key, 'SHA-512');
+            const { filename, timestamp, sender_ip } = metadata;
+            const partialData = { filename, timestamp, sender_ip };
+            partialData.filename = partialData.filename.replace('.enc', '');
             const isValidSignature = await this.verifySignature(
                 metadata.signature,
-                JSON.stringify(metadata),
+                canonicalSerializeMetadata(partialData),
                 senderPublicKey
             );
             if (!isValidSignature) throw new Error('Invalid digital signature');
@@ -721,8 +727,10 @@ class VerificationModal {
 
             // 5. Giải mã session key (RSA)
             this.stepManager.updateStepState(document.getElementById('step-rsa'), 'active');
-            const privateKeyPem = localStorage.getItem('rsa_receiver_private_key_pem');
-            if (!privateKeyPem) throw new Error('No private key found');
+            const hostName = metadata.host_name;
+            const privateKeyStorageKey = 'rsa_host_private_key_pem' + hostName;
+            const privateKeyPem = localStorage.getItem(privateKeyStorageKey);
+            if (!privateKeyPem) throw new Error('No private key found for host: ' + hostName);
             const receiverPrivateKey = await this.importRsaPrivateKey(privateKeyPem, 'SHA-512');
             const sessionKey = await this.decryptSessionKey(metadata.encrypted_session_key, receiverPrivateKey);
             this.stepManager.updateStepState(document.getElementById('step-rsa'), 'success', 'Session key decrypted');
@@ -758,11 +766,26 @@ class VerificationModal {
         return await res.arrayBuffer();
     }
     base64ToArrayBuffer(b64) {
-        const binary = atob(b64);
-        const len = binary.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-        return bytes.buffer;
+        if (!b64 || typeof b64 !== 'string') {
+            throw new Error('Base64 input is missing or not a string');
+        }
+        // Remove whitespace and check for invalid characters
+        b64 = b64.replace(/\s+/g, '');
+        // Check base64 validity (simple check)
+        if (!/^([A-Za-z0-9+/=]+)$/.test(b64)) {
+            console.error('Invalid base64 input:', b64);
+            throw new Error('Invalid base64 input');
+        }
+        try {
+            const binary = atob(b64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes.buffer;
+        } catch (e) {
+            console.error('Failed to decode base64:', b64, e);
+            throw new Error('Failed to decode base64: ' + e.message);
+        }
     }
     async importRsaPublicKey(pem, hashAlg = 'SHA-512') {
         const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
@@ -782,12 +805,11 @@ class VerificationModal {
         const encoder = new TextEncoder();
         const dataBytes = encoder.encode(data);
         const signature = this.base64ToArrayBuffer(signatureB64);
-        const hash = await window.crypto.subtle.digest('SHA-512', dataBytes);
         return window.crypto.subtle.verify(
             { name: 'RSASSA-PKCS1-v1_5' },
             publicKey,
             signature,
-            hash
+            dataBytes
         );
     }
     async calculateSHA512(fileBuffer, iv) {
@@ -986,6 +1008,15 @@ class FileReceiverApp {
             new bootstrap.Tooltip(tooltipTriggerEl)
         );
     }
+}
+
+// Canonical serialization for metadata (must match sender)
+function canonicalSerializeMetadata(metadata) {
+    return JSON.stringify({
+        filename: metadata.filename,
+        timestamp: metadata.timestamp,
+        sender_ip: metadata.sender_ip
+    });
 }
 
 // Initialize application when DOM is ready

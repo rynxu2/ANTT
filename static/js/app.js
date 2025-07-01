@@ -75,11 +75,9 @@ class SecureUploadClient {
                 ivAndCipher.set(new Uint8Array(encryptedContent), iv.length);
                 const fileHash = await this.calculateSHA512(ivAndCipher.buffer);
                 // 6. Metadata: filename, timestamp, sender_ip
-                const senderIp = this.get_ip();
+                const senderIp = await this.get_ip();
                 const metadata = {
                     filename: file.name,
-                    filetype: file.type,
-                    filesize: file.size,
                     timestamp: new Date().toISOString(),
                     sender_ip: senderIp,
                 };
@@ -96,7 +94,7 @@ class SecureUploadClient {
                 const signature = await window.crypto.subtle.sign(
                     { name: 'RSASSA-PKCS1-v1_5' },
                     privateKey,
-                    await window.crypto.subtle.digest('SHA-512', metadataBytes)
+                    metadataBytes
                 );
                 // 8. Prepare FormData (gói tin đúng yêu cầu)
                 const formData = new FormData();

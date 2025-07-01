@@ -833,6 +833,8 @@ def get_file_metadata(session_token):
             'filename': upload_session.filename,
             'timestamp': metadata['metadata']['timestamp'],
             'sender_ip': metadata['metadata']['sender_ip'],
+            'host_name': upload_session.receiver_name,
+            'encrypted_session_key': metadata['encrypted_session_key'],
             'iv': metadata['iv'],
             'file_hash': upload_session.file_hash,
             'signature': metadata['metadata_signature'],
@@ -861,7 +863,7 @@ def oauth2callback():
     if request.args.get('code'):
         try:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
+                'client_secret_287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com.json',
                 SCOPES
             )
             
@@ -882,7 +884,7 @@ def oauth2callback():
     
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
+            'client_secret_287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com.json',
             SCOPES,
             redirect_uri=request.base_url
         )
