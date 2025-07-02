@@ -863,7 +863,7 @@ def oauth2callback():
     if request.args.get('code'):
         try:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'client_secret_287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com.json',
+                'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
                 SCOPES
             )
             
@@ -884,7 +884,7 @@ def oauth2callback():
     
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
-            'client_secret_287954454321-vb7si8192vhk3dbimo3p1qjq8hl67co7.apps.googleusercontent.com.json',
+            'client_secret_326222266772-n102mfh5tjuq7305d5m0jlr7fcn9if4q.apps.googleusercontent.com.json',
             SCOPES,
             redirect_uri=request.base_url
         )
@@ -901,15 +901,28 @@ def oauth2callback():
         app.logger.error(f"OAuth error: {str(e)}")
         return render_template('oauth2callback.html', success=False, error=str(e))
 
-@app.route('/verify/<session_token>/complete', methods=['POST'])
-def complete_verification(session_token):
+@app.route('/verify/<session_token>/<status>', methods=['POST'])
+def complete_verification(session_token, status):
     upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+    if not upload_session:
+        app.logger.error(f"Verification failed: Invalid session token {session_token}")
+        return jsonify({'error': 'Invalid session token'}), 400
     try:
-        upload_session.update_status(FILE_STATUS['VERIFIED'])
+        if status == 'verified':
+            upload_session.update_status(FILE_STATUS['VERIFIED'])
+        elif status == 'failed':
+            upload_session.update_status(FILE_STATUS['FAILED'])
+        elif status == 'downloaded':
+            upload_session.update_status(FILE_STATUS['DOWNLOADED'])
+        else:
+            app.logger.error(f"Verification failed: Invalid status '{status}' for session {session_token}")
+            return jsonify({'error': 'Invalid status'}), 400
+
         db.session.commit()
         notify_status_change(upload_session)
         return jsonify({'message': 'File verified and completed'})
     except Exception as e:
+        app.logger.error(f"Database error during verification for session {session_token}: {str(e)}")
         return jsonify({'error': f'Database error: {str(e)}'}), 500
 
 @app.route('/api/raw_encrypted_file/<session_token>')

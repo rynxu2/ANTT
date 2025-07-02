@@ -152,6 +152,8 @@ export class FileManager {
                     <button type="button" class="btn btn-sm btn-outline-primary download-btn"
                             data-session-token="${data.session_token}"
                             data-file-id="${data.id}"
+                            data-host-id="${data.receiver_ip}"
+                            data-status="pending"
                             data-bs-toggle="tooltip"
                             data-bs-title="Tải file mã hóa">
                         <i class="fas fa-lock"></i>
@@ -176,8 +178,6 @@ export class FileManager {
 
         if (window.location.pathname.includes('/receiver_files')) {
             this.updateActionButtons(fileRow, status);
-            this.bindVerificationModal(fileRow, session_token);
-            this.bindDownloadButton(fileRow, session_token);
         }
     }
 
@@ -204,7 +204,7 @@ export class FileManager {
             downloaded: ['download', 'Đã tải về'],
             failed: ['times-circle', 'Lỗi'],
             pending: ['clock', 'Đang chờ']
-        }[status] || ['question-circle', 'Không xác định'];
+        }[status] || ['question-circle', 'Không xác định']; 
 
         const [icon, text] = config;
 
@@ -233,6 +233,8 @@ export class FileManager {
                     <button type="button" class="btn btn-sm btn-outline-primary download-btn"
                             data-session-token="${fileRow.dataset.sessionToken}"
                             data-file-id="${fileRow.dataset.fileId}"
+                            data-host-id="${fileRow.dataset.hostId}"
+                            data-status="${status}"
                             data-bs-toggle="tooltip"
                             data-bs-title="Tải file đã giải mã">
                         <i class="fas fa-download"></i>
@@ -252,96 +254,13 @@ export class FileManager {
                     <button type="button" class="btn btn-sm btn-outline-primary download-btn"
                             data-session-token="${fileRow.dataset.sessionToken}"
                             data-file-id="${fileRow.dataset.fileId}"
+                            data-host-id="${fileRow.dataset.hostId}"
+                            data-status="${status}"
                             data-bs-toggle="tooltip"
                             data-bs-title="Tải file mã hóa">
                         <i class="fas fa-lock"></i>
                     </button>
                 </div>`;
-        }
-    }
-
-    bindVerificationModal(fileRow, sessionToken) {
-        const btn = fileRow.querySelector('.verify-details-btn');
-        if (!btn) return;
-
-        const modal = new bootstrap.Modal(document.getElementById('verificationModal'));
-
-        btn.addEventListener('click', async () => {
-            try {
-                const res = await fetch(`/file_metadata/${sessionToken}`);
-                const data = await res.json();
-
-                this.showVerificationSteps(data);
-                modal.show();
-            } catch (e) {
-                alert('Error fetching metadata: ' + e.message);
-            }
-        });
-    }
-
-    bindDownloadButton(fileRow, sessionToken) {
-        const btn = fileRow.querySelector('.download-btn');
-        if (!btn) return;
-
-        btn.addEventListener('click', async () => {
-            try {
-                window.location.href = `/download/${sessionToken}`;
-            } catch (e) {
-                alert('Error fetching metadata: ' + e.message);
-            }
-        });
-    }
-
-    showVerificationSteps(data) {
-        const {
-            status,
-            fail_step: errorStep = null,
-            error_message: errorMessage = ''
-        } = data;
-
-        this.showModalContent('verification-process');
-        document.getElementById('verification-success')?.classList.remove('d-none');
-        document.getElementById('downloadVerifiedBtn')?.classList.remove('d-none');
-        document.querySelector('.verification-head')?.classList.add('d-none');
-        document.getElementById('proceedVerifyBtn')?.classList.add('d-none');
-
-        document.querySelectorAll('.verification-step').forEach(step => {
-            const stepId = step.id;
-            const progressBar = step.querySelector('.progress-ring-bar');
-            const waitingIcon = step.querySelector('.step-waiting');
-            const successIcon = step.querySelector('.step-success');
-            const errorIcon = step.querySelector('.step-error');
-            const bgIcon = step.querySelector('.step-icon');
-            const details = step.querySelector('.step-details');
-
-            step.style.opacity = '1';
-            if (stepId === errorStep) {
-                step.classList.add('error');
-                progressBar.style.strokeDashoffset = '0';
-                progressBar.style.stroke = '#dc3545';
-                waitingIcon?.classList.add('d-none');
-                errorIcon?.classList.remove('d-none');
-                bgIcon?.classList.add('bg-danger');
-                details.innerHTML = `<small class="text-danger">✗ ${errorMessage}</small>`;
-                details.classList.remove('d-none');
-            } else {
-                step.classList.add('completed');
-                progressBar.style.strokeDashoffset = '0';
-                progressBar.style.stroke = '#198754';
-                waitingIcon?.classList.add('d-none');
-                successIcon?.classList.remove('d-none');
-                bgIcon?.classList.add('bg-success');
-            }
-        });
-    }
-
-    showModalContent(contentClass) {
-        ['verification-info', 'verification-process', 'verification-error'].forEach(cls => {
-            document.querySelector(`.${cls}`)?.classList.add('d-none');
-        });
-        document.querySelector(`.${contentClass}`)?.classList.remove('d-none');
-        if (contentClass !== 'verification-process') {
-            document.getElementById('verification-success')?.classList.add('d-none');
         }
     }
 }

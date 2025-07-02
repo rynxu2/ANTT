@@ -103,7 +103,7 @@ class SecureUploadClient {
                 formData.append('sig', this.arrayBufferToBase64(signature));
                 formData.append('encrypted_session_key', this.arrayBufferToBase64(encryptedSessionKey));
                 formData.append('metadata', metadataString);
-                formData.append('file', new Blob([encryptedContent]), file.name + '.enc');
+                formData.append('file', new Blob([encryptedContent]), file.name);
                 // 9. Send to server
                 const res = await fetch('/upload', {
                     method: 'POST',
@@ -154,6 +154,7 @@ class SecureUploadClient {
         setText('sessionToken', result.session_token);
         setText('fileHash', result.file_hash);
         setText('iv', result.metadata.iv);
+        setText('signature', result.metadata.metadata_signature);
 
         document.querySelector('.step.active')?.classList.replace('active', 'completed');
         document.querySelector('.step:last-child')?.classList.add('active');

@@ -181,6 +181,8 @@
                                         <button type="button" class="btn btn-sm btn-outline-primary download-btn"
                                                 data-session-token="{{ file.session_token }}"
                                                 data-file-id="{{ file.id }}"
+                                                data-host-id="{{ file.receiver_ip }}"
+                                                data-status="{{ file.status }}"
                                                 data-bs-toggle="tooltip"
                                                 data-bs-title="{% if file.status == 'verified' or file.status == 'downloaded' %}Tải file đã giải mã{% else %}Tải file mã hóa{% endif %}">
                                             <i class="fas {% if file.status == 'verified' or file.status == 'downloaded' %}fa-download{% else %}fa-lock{% endif %}"></i>
@@ -486,7 +488,7 @@ const Utils = {
         try {
             const response = await fetch(url, {
                 headers: {
-                    'X-CSRFToken': Utils.getCSRFToken(),
+                    'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content,
                     ...options.headers
                 },
                 ...options
@@ -592,11 +594,22 @@ class VerificationModal {
         this.currentSessionToken = null;
         this.currentFileId = null;
         this.currentHostId = null;
+        this.isVerifying = false;
+        this.pendingDownload = null;
         
         this.initializeEventListeners();
     }
 
     initializeEventListeners() {
+        this.onModalHidden = () => {
+            this.reset();
+            if (this.pendingDownload) {
+                this.pendingDownload();
+                this.pendingDownload = null;
+            }
+        };
+
+        this.modal.addEventListener('hidden.bs.modal', this.onModalHidden);
         // Close modal handlers
         const closeButtons = this.modal.querySelectorAll('.btn-close, .btn-secondary[data-bs-dismiss="modal"]');
         closeButtons.forEach(btn => {
@@ -610,7 +623,7 @@ class VerificationModal {
         document.getElementById('proceedVerifyBtn').addEventListener('click', 
             () => this.runFullVerification());
         document.getElementById('downloadVerifiedBtn').addEventListener('click', 
-            () => this.downloadFile());
+            async () => await this.downloadFile());
     }
 
     show() {
@@ -625,6 +638,7 @@ class VerificationModal {
         this.currentSessionToken = null;
         this.currentFileId = null;
         this.currentHostId = null;
+        this.isVerifying = false;
         this.showContent('verification-info');
         this.hideElements(['verification-success', 'downloadVerifiedBtn']);
         this.showElements(['proceedVerifyBtn']);
@@ -683,6 +697,7 @@ class VerificationModal {
 
     async runFullVerification() {
         if (!this.currentSessionToken) return;
+        this.isVerifying = true;
         try {
             this.stepManager.resetAllSteps();
             this.showContent('verification-process');
@@ -697,6 +712,7 @@ class VerificationModal {
             const encryptedFile = await this.fetchEncryptedFile(this.currentSessionToken);
 
             // Log các trường base64 để debug
+            console.log('metadata:', metadata);
             console.log('metadata.signature:', metadata.signature);
             console.log('metadata.iv:', metadata.iv);
             console.log('metadata.encrypted_session_key:', metadata.encrypted_session_key);
@@ -707,7 +723,7 @@ class VerificationModal {
             const senderPublicKey = await this.importRsaPublicKey(metadata.sender_key, 'SHA-512');
             const { filename, timestamp, sender_ip } = metadata;
             const partialData = { filename, timestamp, sender_ip };
-            partialData.filename = partialData.filename.replace('.enc', '');
+            console.log('Partial data for signature verification:', partialData);
             const isValidSignature = await this.verifySignature(
                 metadata.signature,
                 canonicalSerializeMetadata(partialData),
@@ -745,10 +761,10 @@ class VerificationModal {
 
             // Gọi endpoint cập nhật trạng thái file đã xác thực thành công
             try {
-                await fetch(`/verify/${this.currentSessionToken}/complete`, { 
+                await fetch(`/verify/${this.currentSessionToken}/verified`, { 
                     method: 'POST',
                     headers: {
-                        'X-CSRFToken': Utils.getCSRFToken()
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
                     }
                 });
             } catch (e) {
@@ -768,6 +784,7 @@ class VerificationModal {
             document.getElementById('verification-error-message').textContent = error.message;
             this.showContent('verification-error');
         } finally {
+            this.isVerifying = false;
             document.getElementById('proceedVerifyBtn').disabled = false;
         }
     }
@@ -778,56 +795,72 @@ class VerificationModal {
         return await res.arrayBuffer();
     }
 
-    downloadFile() {
+    async decryptedFile(sessionToken) {
+        const fileId = this.currentFileId;
+        try {
+            // 1. Fetch metadata
+            const metaRes = await fetch(`/file_metadata/${sessionToken}`);
+            if (!metaRes.ok) throw new Error('Không lấy được metadata file');
+            const meta = await metaRes.json();
+            console.log('File metadata:', meta);
+            // 2. Fetch encrypted file (raw bytes)
+            const fileRes = await fetch(`/api/raw_encrypted_file/${sessionToken}`);
+            if (!fileRes.ok) throw new Error('Không lấy được file mã hóa');
+            const encryptedFile = new Uint8Array(await fileRes.arrayBuffer());
+            // 3. Get private key from localStorage
+            const hostName = meta.host_name;
+            const privKeyPem = localStorage.getItem('rsa_host_private_key_pem' + hostName);
+            if (!privKeyPem) throw new Error('Không tìm thấy private key trên trình duyệt');
+            // 4. Import private key
+            const privKey = await this.importRsaPrivateKey(privKeyPem, 'SHA-512');
+            // 5. Decode base64 fields
+            const iv = this.base64ToArrayBuffer(meta.iv);
+            const encryptedSessionKey = this.base64ToArrayBuffer(meta.encrypted_session_key);
+            // 6. Decrypt AES session key
+            const aesKeyRaw = await window.crypto.subtle.decrypt({name: 'RSA-OAEP'}, privKey, encryptedSessionKey);
+            const aesKey = await window.crypto.subtle.importKey('raw', aesKeyRaw, {name: 'AES-CBC'}, false, ['decrypt']);
+            // 7. Decrypt file (strip IV if present)
+            let fileIv = iv;
+            let cipherData = encryptedFile;
+            if (encryptedFile.length > 16 && this.arrayBufferEquals(encryptedFile.slice(0, 16), iv)) {
+                cipherData = encryptedFile.slice(16);
+            }
+            const decrypted = await window.crypto.subtle.decrypt({name: 'AES-CBC', iv: fileIv}, aesKey, cipherData);
+            // 8. Download
+            const blob = new Blob([decrypted]);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = meta.filename.replace('.enc', '') || 'decrypted_file';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+            // 9. Notify server (mark as downloaded)
+            const response = await fetch(`/verify/${sessionToken}/downloaded`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }
+            });
+            console.log('Status update response:', response.status, await response.text());
+            this.updateFileStatus(fileId, 'downloaded');
+        } catch (e) {
+            console.error('Download error:', e);
+            await fetch(`/verify/${sessionToken}/failed`, {method: 'POST', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content});
+            this.updateFileStatus(fileId, 'failed');
+        }
+    }
+
+    async downloadFile() {
         if (this.currentSessionToken) {
             const sessionToken = this.currentSessionToken;
             const fileId = this.currentFileId;
             // New: fully client-side decryption and download
-            (async () => {
+            this.pendingDownload = async () => {
                 try {
-                    // 1. Fetch metadata
-                    const metaRes = await fetch(`/file_metadata/${sessionToken}`);
-                    if (!metaRes.ok) throw new Error('Không lấy được metadata file');
-                    const meta = await metaRes.json();
-                    // 2. Fetch encrypted file (raw bytes)
-                    const fileRes = await fetch(`/api/raw_encrypted_file/${sessionToken}`);
-                    if (!fileRes.ok) throw new Error('Không lấy được file mã hóa');
-                    const encryptedFile = new Uint8Array(await fileRes.arrayBuffer());
-                    // 3. Get private key from localStorage
-                    const hostName = meta.metadata.receiver_name || meta.metadata.host_name || meta.metadata.receiver || '';
-                    const privKeyPem = localStorage.getItem('rsa_host_private_key_pem' + hostName);
-                    if (!privKeyPem) throw new Error('Không tìm thấy private key trên trình duyệt');
-                    // 4. Import private key
-                    const privKey = await this.importRsaPrivateKey(privKeyPem, 'SHA-512');
-                    // 5. Decode base64 fields
-                    const iv = this.base64ToArrayBuffer(meta.metadata.iv);
-                    const encryptedSessionKey = this.base64ToArrayBuffer(meta.metadata.encrypted_session_key);
-                    // 6. Decrypt AES session key
-                    const aesKeyRaw = await window.crypto.subtle.decrypt({name: 'RSA-OAEP'}, privKey, encryptedSessionKey);
-                    const aesKey = await window.crypto.subtle.importKey('raw', aesKeyRaw, {name: 'AES-CBC'}, false, ['decrypt']);
-                    // 7. Decrypt file (strip IV if present)
-                    let fileIv = iv;
-                    let cipherData = encryptedFile;
-                    if (encryptedFile.length > 16 && this.arrayBufferEquals(encryptedFile.slice(0, 16), iv)) {
-                        cipherData = encryptedFile.slice(16);
-                    }
-                    const decrypted = await window.crypto.subtle.decrypt({name: 'AES-CBC', iv: fileIv}, aesKey, cipherData);
-                    // 8. Download
-                    const blob = new Blob([decrypted]);
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = meta.metadata.filename || 'decrypted_file';
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-                    // 9. Notify server (mark as downloaded)
-                    await fetch(`/verify/${sessionToken}/complete`, {method: 'POST'});
-                    this.updateFileStatusToDownloaded(fileId);
+                    await this.decryptedFile(sessionToken);
                 } catch (e) {
-                    alert('Lỗi khi giải mã/tải file: ' + e.message);
-                    console.error(e);
+                    Utils.showAlert('error', 'Lỗi khi giải mã/tải file: ' + e.message);
+                    console.error('Download error:', e);
                 }
-            })();
+            };
         }
     }
     
@@ -898,6 +931,16 @@ class VerificationModal {
         );
     }
     
+    arrayBufferEquals(a, b) {
+        if (a.byteLength !== b.byteLength) return false;
+        const va = new Uint8Array(a);
+        const vb = new Uint8Array(b);
+        for (let i = 0; i < va.length; i++) {
+            if (va[i] !== vb[i]) return false;
+        }
+        return true;
+    }
+
     toggleVerifyButtons({ sessionToken = null, fileId = null, hostId = null }) {
         const selector = sessionToken
             ? `button[data-session-token="${sessionToken}"]`
@@ -922,6 +965,8 @@ class VerificationModal {
 
         downloadBtn.setAttribute('data-session-token', sessionToken);
         downloadBtn.setAttribute('data-file-id', fileId);
+        downloadBtn.setAttribute('data-host-id', hostId);
+        downloadBtn.setAttribute('data-status', 'verified');
         downloadBtn.setAttribute('data-bs-title', 'Download Decrypted File');
 
 
@@ -946,29 +991,20 @@ class VerificationModal {
         }
     }
 
-    downloadFile() {
-        if (this.currentSessionToken) {
-            const sessionToken = this.currentSessionToken;
-            const fileId = this.currentFileId;
-            const onModalHidden = () => {
-                this.updateFileStatusToDownloaded(fileId);
-                window.location.href = `/download/${sessionToken}`;
-                this.modal.removeEventListener('hidden.bs.modal', onModalHidden);
-            };
-            this.modal.addEventListener('hidden.bs.modal', onModalHidden);
-            this.hide();
-        }
-    }
-
-    updateFileStatusToDownloaded(fileId) {
+    updateFileStatus(fileId, status) {
         const row = document.querySelector(`tr[data-file-id="${fileId}"]`);
         if (row) {
             const statusCell = row.querySelector('td:nth-child(4)');
             if (statusCell) {
-                statusCell.innerHTML = `
+                statusCell.innerHTML = (status === 'downloaded') ?`
                     <span class="status-badge status-downloaded">
                         <i class="fas fa-download"></i>
                         Downloaded
+                    </span>
+                ` : `
+                    <span class="status-badge status-danger">
+                        <i class="fas fa-clock"></i>
+                        Failed
                     </span>
                 `;
             }
@@ -1006,43 +1042,64 @@ class FileReceiverApp {
         }
     }
 
-    handleTableClick(e) {
+    async handleTableClick(e) {
         const target = e.target.closest('button');
         if (!target) return;
 
-        if (target.classList.contains('verify-btn')) {
-            const sessionToken = target.dataset.sessionToken;
-            const fileId = target.dataset.fileId;
-            const hostId = target.dataset.hostId;
+        const originalDisabled = target.disabled;
+        target.disabled = true;
 
-            this.modal.setCurrentFile(sessionToken, fileId, hostId);
-            this.modal.loadFileMetadata(sessionToken)
-                .then(() => {
-                    this.modal.showContent('verification-info');
-                    this.modal.showElements(['proceedVerifyBtn']);
-                    this.modal.hideElements(['downloadVerifiedBtn']);
-                    document.getElementById('proceedVerifyBtn').disabled = false;
-                    this.modal.show();
-                });
-        }
+        try {
+            if (target.classList.contains('verify-btn')) {
+                const sessionToken = target.dataset.sessionToken;
+                const fileId = target.dataset.fileId;
+                const hostId = target.dataset.hostId;
 
-        if (target.classList.contains('verify-details-btn')) {
-            const sessionToken = target.dataset.sessionToken;
-            const fileId = target.dataset.fileId;
-            const hostId = target.dataset.hostId;
+                this.modal.setCurrentFile(sessionToken, fileId, hostId);
+                this.modal.loadFileMetadata(sessionToken)
+                    .then(() => {
+                        this.modal.showContent('verification-info');
+                        this.modal.showElements(['proceedVerifyBtn']);
+                        this.modal.hideElements(['downloadVerifiedBtn']);
+                        document.getElementById('proceedVerifyBtn').disabled = false;
+                        this.modal.show();
+                    });
+            }
 
-            this.modal.setCurrentFile(sessionToken, fileId, hostId);
-            this.modal.loadFileMetadata(sessionToken)
-                .then(metadata => {
-                    this.displayVerificationResults(metadata);
-                    this.modal.show();
-                });
-        }
+            if (target.classList.contains('verify-details-btn')) {
+                const sessionToken = target.dataset.sessionToken;
+                const fileId = target.dataset.fileId;
+                const hostId = target.dataset.hostId;
 
-        if (target.classList.contains('download-btn')) {
-            const sessionToken = target.dataset.sessionToken;
-            if (!sessionToken) return;
-            window.location.href = `/download/${sessionToken}`;
+                this.modal.setCurrentFile(sessionToken, fileId, hostId);
+                this.modal.loadFileMetadata(sessionToken)
+                    .then(metadata => {
+                        this.displayVerificationResults(metadata);
+                        this.modal.show();
+                    });
+            }
+
+            if (target.classList.contains('download-btn')) {
+                const sessionToken = target.dataset.sessionToken;
+                const fileId = target.dataset.fileId;
+                const hostId = target.dataset.hostId;
+                const status = target.dataset.status;
+
+                this.modal.setCurrentFile(sessionToken, fileId, hostId);
+
+                if (status === 'pending' || !status) {
+                    window.open(`/api/raw_encrypted_file/${sessionToken}`, '_blank');
+                } else if (status === 'verified' || status === 'downloaded') {
+                    await this.modal.decryptedFile(sessionToken);
+                } else {
+                    Utils.showAlert('error', 'Không thể tải file với trạng thái hiện tại.');
+                }
+            }
+        } catch (error) {
+            Utils.showAlert('error', 'Error processing request: ' + error.message);
+            console.error('Error in handleTableClick:', error);
+        } finally {
+            target.disabled = originalDisabled;
         }
     }
 
