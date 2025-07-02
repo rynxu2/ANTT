@@ -743,6 +743,18 @@ class VerificationModal {
             this.stepManager.updateStepState(document.getElementById('step-decrypt'), 'success', 'File decrypted');
             await Utils.delay(CONFIG.STEP_DELAY);
 
+            // Gọi endpoint cập nhật trạng thái file đã xác thực thành công
+            try {
+                await fetch(`/verify/${this.currentSessionToken}/complete`, { 
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': Utils.getCSRFToken()
+                    }
+                });
+            } catch (e) {
+                console.warn('Failed to update file status to complete:', e);
+            }
+
             this.showElements(['verification-success', 'downloadVerifiedBtn']);
             this.hideElements(['proceedVerifyBtn']);
             document.querySelector('.verification-head')?.classList.add('d-none');
@@ -765,6 +777,60 @@ class VerificationModal {
         if (!res.ok) throw new Error('Cannot fetch encrypted file');
         return await res.arrayBuffer();
     }
+
+    downloadFile() {
+        if (this.currentSessionToken) {
+            const sessionToken = this.currentSessionToken;
+            const fileId = this.currentFileId;
+            // New: fully client-side decryption and download
+            (async () => {
+                try {
+                    // 1. Fetch metadata
+                    const metaRes = await fetch(`/file_metadata/${sessionToken}`);
+                    if (!metaRes.ok) throw new Error('Không lấy được metadata file');
+                    const meta = await metaRes.json();
+                    // 2. Fetch encrypted file (raw bytes)
+                    const fileRes = await fetch(`/api/raw_encrypted_file/${sessionToken}`);
+                    if (!fileRes.ok) throw new Error('Không lấy được file mã hóa');
+                    const encryptedFile = new Uint8Array(await fileRes.arrayBuffer());
+                    // 3. Get private key from localStorage
+                    const hostName = meta.metadata.receiver_name || meta.metadata.host_name || meta.metadata.receiver || '';
+                    const privKeyPem = localStorage.getItem('rsa_host_private_key_pem' + hostName);
+                    if (!privKeyPem) throw new Error('Không tìm thấy private key trên trình duyệt');
+                    // 4. Import private key
+                    const privKey = await this.importRsaPrivateKey(privKeyPem, 'SHA-512');
+                    // 5. Decode base64 fields
+                    const iv = this.base64ToArrayBuffer(meta.metadata.iv);
+                    const encryptedSessionKey = this.base64ToArrayBuffer(meta.metadata.encrypted_session_key);
+                    // 6. Decrypt AES session key
+                    const aesKeyRaw = await window.crypto.subtle.decrypt({name: 'RSA-OAEP'}, privKey, encryptedSessionKey);
+                    const aesKey = await window.crypto.subtle.importKey('raw', aesKeyRaw, {name: 'AES-CBC'}, false, ['decrypt']);
+                    // 7. Decrypt file (strip IV if present)
+                    let fileIv = iv;
+                    let cipherData = encryptedFile;
+                    if (encryptedFile.length > 16 && this.arrayBufferEquals(encryptedFile.slice(0, 16), iv)) {
+                        cipherData = encryptedFile.slice(16);
+                    }
+                    const decrypted = await window.crypto.subtle.decrypt({name: 'AES-CBC', iv: fileIv}, aesKey, cipherData);
+                    // 8. Download
+                    const blob = new Blob([decrypted]);
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = meta.metadata.filename || 'decrypted_file';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+                    // 9. Notify server (mark as downloaded)
+                    await fetch(`/verify/${sessionToken}/complete`, {method: 'POST'});
+                    this.updateFileStatusToDownloaded(fileId);
+                } catch (e) {
+                    alert('Lỗi khi giải mã/tải file: ' + e.message);
+                    console.error(e);
+                }
+            })();
+        }
+    }
+    
     base64ToArrayBuffer(b64) {
         if (!b64 || typeof b64 !== 'string') {
             throw new Error('Base64 input is missing or not a string');

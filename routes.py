@@ -901,123 +901,6 @@ def oauth2callback():
         app.logger.error(f"OAuth error: {str(e)}")
         return render_template('oauth2callback.html', success=False, error=str(e))
 
-@app.route('/verify/<session_token>/ip', methods=['POST'])
-def verify_ip(session_token):
-    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
-    if not upload_session:
-        return jsonify({'error': 'Invalid session token'}), 404
-
-    client_ip = get_client_ip()
-    if upload_session.receiver_ip != client_ip:
-        upload_session.update_fail_info('ip', 'Unauthorized IP address')
-        db.session.commit()
-        notify_status_change(upload_session)
-        return jsonify({'error': 'Unauthorized'}), 403
-
-    return jsonify({'message': 'IP verified successfully'})
-
-@app.route('/verify/<session_token>/signature', methods=['POST'])
-def verify_signature_route(session_token):
-    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
-    sender_keys = IPUserKeyMapping.query.filter_by(ip_address=upload_session.sender_ip).first()
-    metadata = upload_session.get_metadata()
-    metadata_signature = base64.b64decode(metadata['metadata_signature'])
-    is_valid = verify_signature(
-        json.dumps(metadata['metadata']).encode('utf-8'),
-        metadata_signature,
-        sender_keys.public_key_pem
-    )
-    if not is_valid:
-        upload_session.update_fail_info('signature', 'Invalid signature')
-        db.session.commit()
-        notify_status_change(upload_session)
-        return jsonify({'error': 'Invalid signature'}), 400
-
-    return jsonify({'message': 'Signature verified'})
-
-@app.route('/verify/<session_token>/metadata', methods=['POST'])
-def verify_metadata(session_token):
-    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
-    metadata = upload_session.get_metadata()
-
-    if metadata['metadata']['sender_ip'] != upload_session.sender_ip:
-        upload_session.update_fail_info('hash', 'Sender IP mismatch')
-        db.session.commit()
-        notify_status_change(upload_session)
-        return jsonify({'error': 'Sender IP mismatch'}), 400
-
-    try:
-        timestamp = datetime.fromisoformat(metadata['metadata']['timestamp'])
-    except Exception:
-        upload_session.update_fail_info('hash', 'Invalid timestamp format')
-        db.session.commit()
-        notify_status_change(upload_session)
-        return jsonify({'error': 'Invalid timestamp format'}), 400
-
-    if (datetime.utcnow() - timestamp).total_seconds() > 1800:
-        return jsonify({'error': 'Request expired'}), 400
-
-    return jsonify({'message': 'Metadata verified'})
-
-@app.route('/verify/<session_token>/session-key', methods=['POST'])
-def decrypt_session_key(session_token):
-    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
-    key_mapping = IPHostKeyMapping.query.filter_by(host_ip=get_client_ip(), host_name=upload_session.receiver_name).first()
-    metadata = upload_session.get_metadata()
-    encrypted_session_key = base64.b64decode(metadata['encrypted_session_key'])    
-    try:
-        session_key = decrypt_with_private_key(encrypted_session_key, key_mapping.private_key_pem)
-    except Exception as e:
-        upload_session.update_fail_info('rsa', 'Invalid session key')
-        db.session.commit()
-        notify_status_change(upload_session)
-        print(f"Decryption failed: {str(e)}")
-        return jsonify({'error': 'Invalid session key'}), 400
-
-    upload_session.cache_session_key(session_key)
-    db.session.commit()
-    return jsonify({'message': 'Session key decrypted'})
-
-@app.route('/verify/<session_token>/integrity', methods=['POST'])
-def verify_integrity(session_token):
-    upload_session = UploadSession.query.filter_by(session_token=session_token).first()
-    session_key = upload_session.get_cached_session_key()
-    metadata = upload_session.get_metadata()
-
-    try:
-        iv = base64.b64decode(metadata['iv'])
-        with open(upload_session.filepath, 'rb') as f:
-            file_contents = f.read()
-        stored_iv = file_contents[:16]
-        encrypted_data = file_contents[16:]
-    except Exception:
-        upload_session.update_fail_info('decrypt', 'File read error')
-        db.session.commit()
-        notify_status_change(upload_session)
-        return jsonify({'error': 'File read error'}), 400
-
-    if stored_iv != iv:
-        upload_session.update_fail_info('decrypt', 'IV mismatch')
-        db.session.commit()
-        notify_status_change(upload_session)
-        return jsonify({'error': 'IV mismatch'}), 400
-
-    if not verify_file_hash(stored_iv, encrypted_data, upload_session.file_hash):
-        upload_session.update_fail_info('decrypt', 'File integrity check failed')
-        db.session.commit()
-        notify_status_change(upload_session)
-        return jsonify({'error': 'File integrity check failed'}), 400
-
-    try:
-        _ = decrypt_file_aes(encrypted_data, session_key, stored_iv)
-    except Exception:
-        upload_session.update_fail_info('decrypt', 'Decryption test failed')
-        db.session.commit()
-        notify_status_change(upload_session)
-        return jsonify({'error': 'Decryption test failed'}), 400
-
-    return jsonify({'message': 'File integrity verified'})
-
 @app.route('/verify/<session_token>/complete', methods=['POST'])
 def complete_verification(session_token):
     upload_session = UploadSession.query.filter_by(session_token=session_token).first()
@@ -1028,3 +911,23 @@ def complete_verification(session_token):
         return jsonify({'message': 'File verified and completed'})
     except Exception as e:
         return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+@app.route('/api/raw_encrypted_file/<session_token>')
+def api_raw_encrypted_file(session_token):
+    """Serve the raw encrypted file for client-side decryption"""
+    try:
+        upload_session = UploadSession.query.filter_by(session_token=session_token).first()
+        if not upload_session:
+            return jsonify({'error': 'Invalid session token'}), 404
+        if not upload_session.filepath or not os.path.exists(upload_session.filepath):
+            return jsonify({'error': 'File not found'}), 404
+        # Always serve the encrypted file as-is
+        return send_file(
+            upload_session.filepath,
+            mimetype='application/octet-stream',
+            as_attachment=True,
+            download_name=upload_session.filename + '.enc'
+        )
+    except Exception as e:
+        app.logger.error(f"/api/raw_encrypted_file error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
