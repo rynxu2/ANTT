@@ -790,7 +790,7 @@ class VerificationModal {
     }
 
     async fetchEncryptedFile(sessionToken) {
-        const res = await fetch(`/download/${sessionToken}`);
+        const res = await fetch(`/api/raw_encrypted_file/${sessionToken}`);
         if (!res.ok) throw new Error('Cannot fetch encrypted file');
         return await res.arrayBuffer();
     }
